@@ -67,49 +67,6 @@ export BOT_TOKEN="ваш-токен"
 
 Пример в `configs/config.default.yaml`:
 
-```yaml
-proxy:
-  socks5_port: 1080
-  mtproto_port: 2080
-  enabled: true
-
-# Upstream'ы из конфига загружаются только при первом запуске
-# Далее управление через Telegram бота
-upstreams:
-  - name: "proxy1"
-    type: "socks5"
-    host: "proxy.example.com"
-    port: 1080
-    username: "user"
-    password: "pass"
-    enabled: true
-
-health_check:
-  interval: 10s
-  timeout: 5s
-  unhealthy_threshold: 3
-
-bot:
-  enabled: true
-  token: "YOUR_BOT_TOKEN"
-  admin_chat_ids: [123456789]
-  alert_interval: 5m
-
-metrics:
-  enabled: true
-  port: 9090
-
-log_level: "info"
-```
-
-### Переменные окружения
-
-**Не используются.** Вся конфигурация осуществляется через YAML файл или CLI флаги.
-
-| Переменная | Описание |
-|------------|----------|
-| `TZ` | Часовой пояс (для Docker) |
-
 ### CLI флаги
 
 | Флаг | Описание | По умолчанию |
