@@ -27,13 +27,6 @@ const (
 	socks5RespSuccess = 0x00
 )
 
-// Exported constants for tests
-const (
-	SOCKS5Version    = socks5Version
-	SOCKS5AuthNone   = socks5AuthNone
-	SOCKS5CmdConnect = socks5CmdConnect
-)
-
 // SOCKS5Proxy represents a SOCKS5 proxy server
 type SOCKS5Proxy struct {
 	config      *config.Config

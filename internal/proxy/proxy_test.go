@@ -1,4 +1,4 @@
-package tests
+package proxy
 
 import (
 	"testing"
@@ -10,10 +10,9 @@ import (
 	"github.com/Nakray/proxy-switcher/internal/database"
 	"github.com/Nakray/proxy-switcher/internal/healthcheck"
 	"github.com/Nakray/proxy-switcher/internal/metrics"
-	"github.com/Nakray/proxy-switcher/internal/proxy"
 )
 
-func setupTestDBForProxy(t *testing.T) (*database.Database, *database.UpstreamRepository) {
+func setupTestDB(t *testing.T) (*database.Database, *database.UpstreamRepository) {
 	t.Helper()
 
 	tmpFile := t.TempDir() + "/test.db"
@@ -28,7 +27,7 @@ func setupTestDBForProxy(t *testing.T) (*database.Database, *database.UpstreamRe
 }
 
 func TestNewSOCKS5Proxy(t *testing.T) {
-	db, repo := setupTestDBForProxy(t)
+	db, repo := setupTestDB(t)
 	defer db.Close()
 
 	cfg := &config.Config{
@@ -42,15 +41,15 @@ func TestNewSOCKS5Proxy(t *testing.T) {
 	metricsCollector := metrics.NewSafeCollector(logger, []string{})
 	checker := healthcheck.NewChecker(cfg, repo, metricsCollector, logger)
 
-	proxyInstance := proxy.NewSOCKS5Proxy(cfg, checker, metricsCollector, logger)
+	proxy := NewSOCKS5Proxy(cfg, checker, metricsCollector, logger)
 
-	if proxyInstance == nil {
+	if proxy == nil {
 		t.Fatal("NewSOCKS5Proxy() returned nil")
 	}
 }
 
 func TestNewMTProtoProxy(t *testing.T) {
-	db, repo := setupTestDBForProxy(t)
+	db, repo := setupTestDB(t)
 	defer db.Close()
 
 	cfg := &config.Config{
@@ -64,20 +63,20 @@ func TestNewMTProtoProxy(t *testing.T) {
 	metricsCollector := metrics.NewSafeCollector(logger, []string{})
 	checker := healthcheck.NewChecker(cfg, repo, metricsCollector, logger)
 
-	proxyInstance := proxy.NewMTProtoProxy(cfg, checker, metricsCollector, logger)
+	proxy := NewMTProtoProxy(cfg, checker, metricsCollector, logger)
 
-	if proxyInstance == nil {
+	if proxy == nil {
 		t.Fatal("NewMTProtoProxy() returned nil")
 	}
 }
 
 func TestSOCKS5ProxyStartStop(t *testing.T) {
-	db, repo := setupTestDBForProxy(t)
+	db, repo := setupTestDB(t)
 	defer db.Close()
 
 	cfg := &config.Config{
 		Proxy: config.ProxyConfig{
-			SOCKS5Port: 0, // Use port 0 for dynamic assignment in tests
+			SOCKS5Port: 0,
 			Enabled:    true,
 		},
 	}
@@ -86,14 +85,13 @@ func TestSOCKS5ProxyStartStop(t *testing.T) {
 	metricsCollector := metrics.NewSafeCollector(logger, []string{})
 	checker := healthcheck.NewChecker(cfg, repo, metricsCollector, logger)
 
-	proxyInstance := proxy.NewSOCKS5Proxy(cfg, checker, metricsCollector, logger)
+	proxy := NewSOCKS5Proxy(cfg, checker, metricsCollector, logger)
 
-	// Test that stop doesn't panic when proxy hasn't started
-	proxyInstance.Stop()
+	proxy.Stop()
 }
 
 func TestMTProtoProxyStartStop(t *testing.T) {
-	db, repo := setupTestDBForProxy(t)
+	db, repo := setupTestDB(t)
 	defer db.Close()
 
 	cfg := &config.Config{
@@ -107,16 +105,15 @@ func TestMTProtoProxyStartStop(t *testing.T) {
 	metricsCollector := metrics.NewSafeCollector(logger, []string{})
 	checker := healthcheck.NewChecker(cfg, repo, metricsCollector, logger)
 
-	proxyInstance := proxy.NewMTProtoProxy(cfg, checker, metricsCollector, logger)
+	proxy := NewMTProtoProxy(cfg, checker, metricsCollector, logger)
 
-	// Test that stop doesn't panic when proxy hasn't started
-	proxyInstance.Stop()
+	proxy.Stop()
 }
 
 func TestMTProtoCipher(t *testing.T) {
 	secret := "test-secret-key-for-mtproto"
 
-	cipher, err := proxy.NewMTProtoCipher(secret)
+	cipher, err := NewMTProtoCipher(secret)
 	if err != nil {
 		t.Fatalf("NewMTProtoCipher() error = %v", err)
 	}
@@ -125,47 +122,39 @@ func TestMTProtoCipher(t *testing.T) {
 		t.Fatal("NewMTProtoCipher() returned nil")
 	}
 
-	// Test encryption/decryption roundtrip
 	plaintext := []byte("Hello, World! This is a test message for MTProto cipher.")
 	encrypted := make([]byte, len(plaintext))
 	decrypted := make([]byte, len(plaintext))
 
 	cipher.Encrypt(encrypted, plaintext)
 
-	// Encrypted should be different from plaintext
 	if string(encrypted) == string(plaintext) {
 		t.Error("Encryption did not change data")
 	}
 
-	// Note: Due to CFB mode, we need fresh cipher for decryption
-	// or reset the IV. This is a simplified test.
-	cipher2, _ := proxy.NewMTProtoCipher(secret)
+	cipher2, _ := NewMTProtoCipher(secret)
 	cipher2.Decrypt(decrypted, encrypted)
 
-	// In CFB mode with same IV, decryption won't work correctly
-	// This is expected behavior for this simplified implementation
 	_ = decrypted
 }
 
 func TestSOCKS5Constants(t *testing.T) {
-	// Verify SOCKS5 constants are defined correctly
-	if proxy.SOCKS5Version != 0x05 {
-		t.Errorf("Expected SOCKS5Version 0x05, got 0x%02x", proxy.SOCKS5Version)
+	if socks5Version != 0x05 {
+		t.Errorf("Expected socks5Version 0x05, got 0x%02x", socks5Version)
 	}
-	if proxy.SOCKS5AuthNone != 0x00 {
-		t.Errorf("Expected SOCKS5AuthNone 0x00, got 0x%02x", proxy.SOCKS5AuthNone)
+	if socks5AuthNone != 0x00 {
+		t.Errorf("Expected socks5AuthNone 0x00, got 0x%02x", socks5AuthNone)
 	}
-	if proxy.SOCKS5CmdConnect != 0x01 {
-		t.Errorf("Expected SOCKS5CmdConnect 0x01, got 0x%02x", proxy.SOCKS5CmdConnect)
+	if socks5CmdConnect != 0x01 {
+		t.Errorf("Expected socks5CmdConnect 0x01, got 0x%02x", socks5CmdConnect)
 	}
 }
 
 func TestMTProtoConstants(t *testing.T) {
-	// Verify MTProto constants are defined
-	if proxy.MTProtoTagAbridged != 0xefefefef {
-		t.Errorf("Expected MTProtoTagAbridged 0xefefefef, got 0x%08x", proxy.MTProtoTagAbridged)
+	if mtprotoTagAbridged != 0xefefefef {
+		t.Errorf("Expected mtprotoTagAbridged 0xefefefef, got 0x%08x", mtprotoTagAbridged)
 	}
-	if proxy.MTProtoMaxPacketLen != 16*1024 {
-		t.Errorf("Expected MTProtoMaxPacketLen 16384, got %d", proxy.MTProtoMaxPacketLen)
+	if mtprotoMaxPacketLen != 16*1024 {
+		t.Errorf("Expected mtprotoMaxPacketLen 16384, got %d", mtprotoMaxPacketLen)
 	}
 }

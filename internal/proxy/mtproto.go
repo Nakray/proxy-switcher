@@ -28,12 +28,6 @@ const (
 	mtprotoMaxPacketLen = 16 * 1024
 )
 
-// Exported constants for tests
-const (
-	MTProtoTagAbridged  = mtprotoTagAbridged
-	MTProtoMaxPacketLen = mtprotoMaxPacketLen
-)
-
 // MTProtoProxy represents an MTProto proxy server
 type MTProtoProxy struct {
 	config      *config.Config

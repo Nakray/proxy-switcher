@@ -1,16 +1,14 @@
-package tests
+package config
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
-
-	"github.com/Nakray/proxy-switcher/internal/config"
 )
 
 func TestDefaultConfig(t *testing.T) {
-	cfg := config.DefaultConfig()
+	cfg := DefaultConfig()
 
 	if cfg.Proxy.SOCKS5Port != 1080 {
 		t.Errorf("Expected SOCKS5Port 1080, got %d", cfg.Proxy.SOCKS5Port)
@@ -29,20 +27,20 @@ func TestDefaultConfig(t *testing.T) {
 func TestConfigValidate(t *testing.T) {
 	tests := []struct {
 		name    string
-		config  *config.Config
+		config  *Config
 		wantErr bool
 	}{
 		{
 			name: "valid config",
-			config: &config.Config{
-				Proxy: config.ProxyConfig{
+			config: &Config{
+				Proxy: ProxyConfig{
 					SOCKS5Port: 1080,
 					Enabled:    true,
 				},
-				Upstreams: []config.Upstream{
+				Upstreams: []Upstream{
 					{
 						Name: "test-upstream",
-						Type: config.UpstreamTypeSOCKS5,
+						Type: UpstreamTypeSOCKS5,
 						Host: "localhost",
 						Port: 1081,
 					},
@@ -52,23 +50,23 @@ func TestConfigValidate(t *testing.T) {
 		},
 		{
 			name: "no upstreams",
-			config: &config.Config{
-				Proxy: config.ProxyConfig{
+			config: &Config{
+				Proxy: ProxyConfig{
 					SOCKS5Port: 1080,
 					Enabled:    true,
 				},
-				Upstreams: []config.Upstream{},
+				Upstreams: []Upstream{},
 			},
 			wantErr: true,
 		},
 		{
 			name: "invalid upstream type",
-			config: &config.Config{
-				Proxy: config.ProxyConfig{
+			config: &Config{
+				Proxy: ProxyConfig{
 					SOCKS5Port: 1080,
 					Enabled:    true,
 				},
-				Upstreams: []config.Upstream{
+				Upstreams: []Upstream{
 					{
 						Name: "test",
 						Type: "invalid",
@@ -81,15 +79,15 @@ func TestConfigValidate(t *testing.T) {
 		},
 		{
 			name: "invalid port",
-			config: &config.Config{
-				Proxy: config.ProxyConfig{
+			config: &Config{
+				Proxy: ProxyConfig{
 					SOCKS5Port: 1080,
 					Enabled:    true,
 				},
-				Upstreams: []config.Upstream{
+				Upstreams: []Upstream{
 					{
 						Name: "test",
-						Type: config.UpstreamTypeSOCKS5,
+						Type: UpstreamTypeSOCKS5,
 						Host: "localhost",
 						Port: 0,
 					},
@@ -99,20 +97,20 @@ func TestConfigValidate(t *testing.T) {
 		},
 		{
 			name: "bot enabled without token",
-			config: &config.Config{
-				Proxy: config.ProxyConfig{
+			config: &Config{
+				Proxy: ProxyConfig{
 					SOCKS5Port: 1080,
 					Enabled:    true,
 				},
-				Upstreams: []config.Upstream{
+				Upstreams: []Upstream{
 					{
 						Name: "test",
-						Type: config.UpstreamTypeSOCKS5,
+						Type: UpstreamTypeSOCKS5,
 						Host: "localhost",
 						Port: 1081,
 					},
 				},
-				Bot: config.BotConfig{
+				Bot: BotConfig{
 					Enabled: true,
 				},
 			},
@@ -131,7 +129,6 @@ func TestConfigValidate(t *testing.T) {
 }
 
 func TestLoadFromFile(t *testing.T) {
-	// Create a temporary config file
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.yaml")
 
@@ -173,7 +170,7 @@ log_level: "debug"
 		t.Fatalf("Failed to write temp config: %v", err)
 	}
 
-	cfg, err := config.LoadFromFile(configPath)
+	cfg, err := LoadFromFile(configPath)
 	if err != nil {
 		t.Fatalf("LoadFromFile() error = %v", err)
 	}
@@ -196,13 +193,12 @@ log_level: "debug"
 }
 
 func TestLoadFromEnv(t *testing.T) {
-	// Use t.Setenv which automatically restores env vars after test
 	t.Setenv("PROXY_SOCKS5_PORT", "2000")
 	t.Setenv("PROXY_MTProto_PORT", "3000")
 	t.Setenv("HEALTH_CHECK_INTERVAL", "20s")
 	t.Setenv("METRICS_PORT", "8080")
 
-	cfg := config.LoadFromEnv()
+	cfg := LoadFromEnv()
 
 	if cfg.Proxy.SOCKS5Port != 2000 {
 		t.Errorf("Expected SOCKS5Port 2000 from env, got %d", cfg.Proxy.SOCKS5Port)
@@ -219,29 +215,28 @@ func TestLoadFromEnv(t *testing.T) {
 }
 
 func TestConfigString(t *testing.T) {
-	cfg := &config.Config{
-		Proxy: config.ProxyConfig{
+	cfg := &Config{
+		Proxy: ProxyConfig{
 			SOCKS5Port: 1080,
 			Enabled:    true,
 		},
-		Upstreams: []config.Upstream{
+		Upstreams: []Upstream{
 			{
 				Name:     "test",
-				Type:     config.UpstreamTypeSOCKS5,
+				Type:     UpstreamTypeSOCKS5,
 				Host:     "localhost",
 				Port:     1081,
 				Password: "mysecretpassword",
 				Secret:   "mtproto-super-secret",
 			},
 		},
-		Bot: config.BotConfig{
+		Bot: BotConfig{
 			Token: "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11",
 		},
 	}
 
 	str := cfg.String()
 
-	// Secrets should be masked - original values should not appear
 	if contains(str, "mysecretpassword") {
 		t.Error("Config.String() should mask passwords")
 	}
@@ -252,7 +247,6 @@ func TestConfigString(t *testing.T) {
 		t.Error("Config.String() should mask bot token")
 	}
 
-	// Masked values should appear
 	if !contains(str, "***") {
 		t.Error("Config.String() should show masked values as ***")
 	}

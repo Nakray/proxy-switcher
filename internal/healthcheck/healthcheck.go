@@ -30,8 +30,8 @@ type Checker struct {
 	metrics    *metrics.SafeCollector
 	logger     *zap.Logger
 
-	Mu       sync.RWMutex
-	Statuses map[string]*UpstreamStatus
+	mu       sync.RWMutex
+	statuses map[string]*UpstreamStatus
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -46,7 +46,7 @@ func NewChecker(cfg *config.Config, db *database.UpstreamRepository, m *metrics.
 		db:       db,
 		metrics:  m,
 		logger:   logger,
-		Statuses: make(map[string]*UpstreamStatus),
+		statuses: make(map[string]*UpstreamStatus),
 		ctx:      ctx,
 		cancel:   cancel,
 	}
@@ -61,12 +61,12 @@ func (h *Checker) LoadUpstreams() error {
 		return fmt.Errorf("failed to load upstreams from database: %w", err)
 	}
 
-	h.Mu.Lock()
-	defer h.Mu.Unlock()
+	h.mu.Lock()
+	defer h.mu.Unlock()
 
 	for _, upstream := range upstreams {
 		key := h.upstreamKey(upstream)
-		h.Statuses[key] = &UpstreamStatus{
+		h.statuses[key] = &UpstreamStatus{
 			Upstream:  upstream,
 			Healthy:   false,
 			LastCheck: time.Time{},
@@ -113,14 +113,14 @@ func (h *Checker) checkAllUpstreams() {
 	h.logger.Debug("Running health checks on all upstreams")
 
 	var wg sync.WaitGroup
-	h.Mu.RLock()
-	upstreamsToCheck := make([]config.Upstream, 0, len(h.Statuses))
-	for _, status := range h.Statuses {
+	h.mu.RLock()
+	upstreamsToCheck := make([]config.Upstream, 0, len(h.statuses))
+	for _, status := range h.statuses {
 		if status.Upstream.Enabled {
 			upstreamsToCheck = append(upstreamsToCheck, status.Upstream)
 		}
 	}
-	h.Mu.RUnlock()
+	h.mu.RUnlock()
 
 	for _, upstream := range upstreamsToCheck {
 		wg.Add(1)
@@ -133,17 +133,17 @@ func (h *Checker) checkAllUpstreams() {
 
 	// Log summary
 	healthyCount := 0
-	h.Mu.RLock()
-	for _, status := range h.Statuses {
+	h.mu.RLock()
+	for _, status := range h.statuses {
 		if status.Healthy {
 			healthyCount++
 		}
 	}
-	h.Mu.RUnlock()
+	h.mu.RUnlock()
 
 	h.logger.Info("Health check completed",
 		zap.Int("healthy", healthyCount),
-		zap.Int("total", len(h.Statuses)))
+		zap.Int("total", len(h.statuses)))
 }
 
 func (h *Checker) checkUpstream(upstream config.Upstream) {
@@ -153,8 +153,8 @@ func (h *Checker) checkUpstream(upstream config.Upstream) {
 	healthy, latency := h.probeUpstream(upstream)
 	duration := time.Since(startTime)
 
-	h.Mu.Lock()
-	status := h.Statuses[key]
+	h.mu.Lock()
+	status := h.statuses[key]
 	status.LastCheck = startTime
 	status.Latency = latency
 
@@ -177,7 +177,7 @@ func (h *Checker) checkUpstream(upstream config.Upstream) {
 		}
 		status.Healthy = status.Consecutive < h.config.HealthCheck.UnhealthyThreshold
 	}
-	h.Mu.Unlock()
+	h.mu.Unlock()
 
 	// Update metrics
 	h.metrics.SetUpstreamHealth(upstream.Name, string(upstream.Type), status.Healthy)
@@ -257,27 +257,17 @@ func (h *Checker) probeMTProto(ctx context.Context, upstream config.Upstream) (b
 	return true, latency
 }
 
-// ProbeSOCKS5 performs a SOCKS5 health check (exported for tests)
-func (h *Checker) ProbeSOCKS5(ctx context.Context, upstream config.Upstream) (bool, time.Duration) {
-	return h.probeSOCKS5(ctx, upstream)
-}
-
-// ProbeMTProto performs an MTProto health check (exported for tests)
-func (h *Checker) ProbeMTProto(ctx context.Context, upstream config.Upstream) (bool, time.Duration) {
-	return h.probeMTProto(ctx, upstream)
-}
-
 func (h *Checker) upstreamKey(upstream config.Upstream) string {
 	return fmt.Sprintf("%s_%s", upstream.Name, upstream.Type)
 }
 
 // GetHealthyUpstreams returns a list of healthy upstreams
 func (h *Checker) GetHealthyUpstreams() []config.Upstream {
-	h.Mu.RLock()
-	defer h.Mu.RUnlock()
+	h.mu.RLock()
+	defer h.mu.RUnlock()
 
 	var healthy []config.Upstream
-	for _, status := range h.Statuses {
+	for _, status := range h.statuses {
 		if status.Healthy {
 			healthy = append(healthy, status.Upstream)
 		}
@@ -287,11 +277,11 @@ func (h *Checker) GetHealthyUpstreams() []config.Upstream {
 
 // GetBestUpstream returns the healthy upstream with lowest latency
 func (h *Checker) GetBestUpstream(upstreamType config.UpstreamType) *config.Upstream {
-	h.Mu.RLock()
-	defer h.Mu.RUnlock()
+	h.mu.RLock()
+	defer h.mu.RUnlock()
 
 	var best *UpstreamStatus
-	for _, status := range h.Statuses {
+	for _, status := range h.statuses {
 		if !status.Healthy {
 			continue
 		}
@@ -314,10 +304,10 @@ func (h *Checker) GetBestUpstream(upstreamType config.UpstreamType) *config.Upst
 
 // GetUpstreamStatus returns the status of a specific upstream
 func (h *Checker) GetUpstreamStatus(name string) *UpstreamStatus {
-	h.Mu.RLock()
-	defer h.Mu.RUnlock()
+	h.mu.RLock()
+	defer h.mu.RUnlock()
 
-	for key, status := range h.Statuses {
+	for key, status := range h.statuses {
 		if status.Upstream.Name == name {
 			_ = key
 			return status
@@ -328,11 +318,11 @@ func (h *Checker) GetUpstreamStatus(name string) *UpstreamStatus {
 
 // GetAllStatuses returns all upstream statuses
 func (h *Checker) GetAllStatuses() map[string]*UpstreamStatus {
-	h.Mu.RLock()
-	defer h.Mu.RUnlock()
+	h.mu.RLock()
+	defer h.mu.RUnlock()
 
 	result := make(map[string]*UpstreamStatus)
-	for k, v := range h.Statuses {
+	for k, v := range h.statuses {
 		result[k] = v
 	}
 	return result
@@ -340,10 +330,10 @@ func (h *Checker) GetAllStatuses() map[string]*UpstreamStatus {
 
 // AreAllUpstreamsDown returns true if all upstreams are unhealthy
 func (h *Checker) AreAllUpstreamsDown() bool {
-	h.Mu.RLock()
-	defer h.Mu.RUnlock()
+	h.mu.RLock()
+	defer h.mu.RUnlock()
 
-	for _, status := range h.Statuses {
+	for _, status := range h.statuses {
 		if status.Healthy {
 			return false
 		}
@@ -353,11 +343,11 @@ func (h *Checker) AreAllUpstreamsDown() bool {
 
 // GetHealthyCount returns the number of healthy upstreams
 func (h *Checker) GetHealthyCount() int {
-	h.Mu.RLock()
-	defer h.Mu.RUnlock()
+	h.mu.RLock()
+	defer h.mu.RUnlock()
 
 	count := 0
-	for _, status := range h.Statuses {
+	for _, status := range h.statuses {
 		if status.Healthy {
 			count++
 		}
@@ -367,11 +357,11 @@ func (h *Checker) GetHealthyCount() int {
 
 // AddUpstream adds a new upstream to the checker
 func (h *Checker) AddUpstream(upstream config.Upstream) error {
-	h.Mu.Lock()
-	defer h.Mu.Unlock()
+	h.mu.Lock()
+	defer h.mu.Unlock()
 
 	key := h.upstreamKey(upstream)
-	if _, exists := h.Statuses[key]; exists {
+	if _, exists := h.statuses[key]; exists {
 		return fmt.Errorf("upstream %s already exists", upstream.Name)
 	}
 
@@ -380,7 +370,7 @@ func (h *Checker) AddUpstream(upstream config.Upstream) error {
 		return err
 	}
 
-	h.Statuses[key] = &UpstreamStatus{
+	h.statuses[key] = &UpstreamStatus{
 		Upstream:  upstream,
 		Healthy:   false,
 		LastCheck: time.Time{},
@@ -400,16 +390,16 @@ func (h *Checker) AddUpstream(upstream config.Upstream) error {
 
 // RemoveUpstream removes an upstream from the checker
 func (h *Checker) RemoveUpstream(name string) error {
-	h.Mu.Lock()
-	defer h.Mu.Unlock()
+	h.mu.Lock()
+	defer h.mu.Unlock()
 
 	var found bool
 	var upstreamType string
-	for key, status := range h.Statuses {
+	for key, status := range h.statuses {
 		if status.Upstream.Name == name {
 			found = true
 			upstreamType = string(status.Upstream.Type)
-			delete(h.Statuses, key)
+			delete(h.statuses, key)
 			break
 		}
 	}
@@ -432,10 +422,10 @@ func (h *Checker) RemoveUpstream(name string) error {
 
 // EnableUpstream enables an upstream
 func (h *Checker) EnableUpstream(name string) error {
-	h.Mu.Lock()
-	defer h.Mu.Unlock()
+	h.mu.Lock()
+	defer h.mu.Unlock()
 
-	for _, status := range h.Statuses {
+	for _, status := range h.statuses {
 		if status.Upstream.Name == name {
 			status.Upstream.Enabled = true
 			// Update database
@@ -452,10 +442,10 @@ func (h *Checker) EnableUpstream(name string) error {
 
 // DisableUpstream disables an upstream
 func (h *Checker) DisableUpstream(name string) error {
-	h.Mu.Lock()
-	defer h.Mu.Unlock()
+	h.mu.Lock()
+	defer h.mu.Unlock()
 
-	for _, status := range h.Statuses {
+	for _, status := range h.statuses {
 		if status.Upstream.Name == name {
 			status.Upstream.Enabled = false
 			// Update database
@@ -472,11 +462,11 @@ func (h *Checker) DisableUpstream(name string) error {
 
 // GetUpstreamNames returns a list of all upstream names
 func (h *Checker) GetUpstreamNames() []string {
-	h.Mu.RLock()
-	defer h.Mu.RUnlock()
+	h.mu.RLock()
+	defer h.mu.RUnlock()
 
-	names := make([]string, 0, len(h.Statuses))
-	for _, status := range h.Statuses {
+	names := make([]string, 0, len(h.statuses))
+	for _, status := range h.statuses {
 		names = append(names, status.Upstream.Name)
 	}
 	return names
@@ -484,10 +474,10 @@ func (h *Checker) GetUpstreamNames() []string {
 
 // GetUpstreamByName returns an upstream by name
 func (h *Checker) GetUpstreamByName(name string) *config.Upstream {
-	h.Mu.RLock()
-	defer h.Mu.RUnlock()
+	h.mu.RLock()
+	defer h.mu.RUnlock()
 
-	for _, status := range h.Statuses {
+	for _, status := range h.statuses {
 		if status.Upstream.Name == name {
 			upstream := status.Upstream
 			return &upstream
