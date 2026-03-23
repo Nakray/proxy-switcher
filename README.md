@@ -57,10 +57,6 @@ export BOT_TOKEN="ваш-токен"
 ### Хранение данных
 
 Сервис использует **SQLite** для хранения конфигурации upstream'ов.
-
-- **Путь к БД по умолчанию**: `data/proxy-switcher.db`
-- **Параметр CLI**: `-db path/to/database.db`
-- **Инициализация**: При первом запуске база создаётся автоматически
 - **Seed данных**: Upstream'ы из конфига загружаются только если БД пустая
 
 ### YAML конфигурация
@@ -112,8 +108,6 @@ export BOT_TOKEN="ваш-токен"
 
 ## 📊 Метрики
 
-Сервис предоставляет метрики Prometheus на порту 9090:
-
 | Метрика | Описание |
 |---------|----------|
 | `proxy_active_connections` | Активные соединения |
@@ -131,8 +125,6 @@ export BOT_TOKEN="ваш-токен"
 
 ### Grafana дашборд
 
-Доступен по адресу `http://localhost:3000`
-
 Включает:
 - Активные/всего соединений
 - Переданные байты
@@ -141,32 +133,6 @@ export BOT_TOKEN="ваш-токен"
 - Частота запросов
 - Частота ошибок
 
-## 🔌 Настройка upstream'ов
-
-### SOCKS5 upstream
-
-```yaml
-upstreams:
-  - name: "my-socks5"
-    type: "socks5"
-    host: "proxy.example.com"
-    port: 1080
-    username: "user"      # Опционально
-    password: "pass"      # Опционально
-    enabled: true
-```
-
-### MTProto upstream
-
-```yaml
-upstreams:
-  - name: "my-mtproto"
-    type: "mtproto"
-    host: "mtproxy.example.com"
-    port: 443
-    secret: "dd00000000000000000000000000000000"
-    enabled: true
-```
 
 ## 🌐 API эндпоинты
 
