@@ -1,4 +1,4 @@
-# Telegram Proxy Manager
+# Proxy-Switcher for Telegram
 
 Сервис управления прокси для Telegram на Go. Служба принимает входящие соединения от клиентов Telegram через SOCKS5 или MTProto и маршрутизирует трафик через лучший доступный upstream-прокси на основе проверок.
 
