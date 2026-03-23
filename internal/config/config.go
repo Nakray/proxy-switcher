@@ -44,6 +44,9 @@ type BotConfig struct {
 	Token         string        `yaml:"token" json:"token"`
 	AdminChatIDs  []int64       `yaml:"admin_chat_ids" json:"admin_chat_ids"`
 	AlertInterval time.Duration `yaml:"alert_interval" json:"alert_interval"`
+	UseProxy      bool          `yaml:"use_proxy,omitempty" json:"use_proxy,omitempty"`
+	MaxRetries    int           `yaml:"max_retries,omitempty" json:"max_retries,omitempty"`
+	RetryDelay    time.Duration `yaml:"retry_delay,omitempty" json:"retry_delay,omitempty"`
 }
 
 // MetricsConfig holds Prometheus metrics configuration
@@ -62,12 +65,13 @@ type ProxyConfig struct {
 
 // Config holds the entire application configuration
 type Config struct {
-	Proxy       ProxyConfig       `yaml:"proxy" json:"proxy"`
-	Upstreams   []Upstream        `yaml:"upstreams" json:"upstreams"`
-	HealthCheck HealthCheckConfig `yaml:"health_check" json:"health_check"`
-	Bot         BotConfig         `yaml:"bot" json:"bot"`
-	Metrics     MetricsConfig     `yaml:"metrics" json:"metrics"`
-	LogLevel    string            `yaml:"log_level" json:"log_level"`
+	Proxy           ProxyConfig       `yaml:"proxy" json:"proxy"`
+	Upstreams       []Upstream        `yaml:"upstreams" json:"upstreams"`
+	BootstrapUpstream *Upstream       `yaml:"bootstrap_upstream,omitempty" json:"bootstrap_upstream,omitempty"`
+	HealthCheck     HealthCheckConfig `yaml:"health_check" json:"health_check"`
+	Bot             BotConfig         `yaml:"bot" json:"bot"`
+	Metrics         MetricsConfig     `yaml:"metrics" json:"metrics"`
+	LogLevel        string            `yaml:"log_level" json:"log_level"`
 }
 
 // DefaultConfig returns a configuration with default values

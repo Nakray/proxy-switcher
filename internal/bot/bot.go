@@ -3,6 +3,8 @@ package bot
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -23,8 +25,9 @@ type Bot struct {
 	metrics     *metrics.SafeCollector
 	logger      *zap.Logger
 
-	api *tgbotapi.BotAPI
-	mu  sync.Mutex
+	api        *tgbotapi.BotAPI
+	httpClient *http.Client
+	mu         sync.Mutex
 
 	alertTicker   *time.Ticker
 	alertDone     chan struct{}
@@ -44,7 +47,7 @@ type addStep struct {
 	password string
 }
 
-// NewBot creates a new Telegram bot
+// NewBot creates a new Telegram bot with retry support and proxy switching
 func NewBot(
 	cfg *config.Config,
 	hc *healthcheck.Checker,
@@ -56,24 +59,100 @@ func NewBot(
 		return nil, nil
 	}
 
-	api, err := tgbotapi.NewBotAPI(cfg.Bot.Token)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create bot: %w", err)
+	// Default retry settings
+	maxRetries := cfg.Bot.MaxRetries
+	retryDelay := cfg.Bot.RetryDelay
+	if maxRetries == 0 {
+		maxRetries = 5
+	}
+	if retryDelay == 0 {
+		retryDelay = 2 * time.Second
 	}
 
-	bot := &Bot{
-		config:      cfg,
-		healthCheck: hc,
-		metrics:     m,
-		logger:      logger,
-		api:         api,
-		alertDone:   make(chan struct{}),
-		addSteps:    make(map[int64]*addStep),
+	// Retry with proxy switching
+	// After maxRetriesPerProxy failures, try a different proxy
+	maxRetriesPerProxy := 2
+	totalAttempts := 0
+	currentProxyAttempts := 0
+	lastProxyHost := ""
+
+	for totalAttempts < maxRetries {
+		totalAttempts++
+		currentProxyAttempts++
+
+		// Create HTTP client with proxy if enabled in config
+		var httpClient *http.Client
+		var proxyHost string
+		var err error
+
+		if cfg.Bot.UseProxy {
+			httpClient, proxyHost, err = createHTTPClientWithProxyAndHost(hc, lastProxyHost)
+			if err != nil {
+				logger.Warn("Failed to create HTTP client with proxy, using direct connection",
+					zap.Error(err),
+					zap.Int("attempt", totalAttempts))
+				httpClient = &http.Client{Timeout: 30 * time.Second}
+				proxyHost = "direct"
+			}
+		} else {
+			httpClient = &http.Client{Timeout: 30 * time.Second}
+			proxyHost = "direct"
+		}
+
+		// Check if we need to switch proxy
+		if proxyHost != lastProxyHost && lastProxyHost != "" {
+			logger.Info("Switched to different proxy",
+				zap.String("old_proxy", lastProxyHost),
+				zap.String("new_proxy", proxyHost))
+			currentProxyAttempts = 1
+		}
+		lastProxyHost = proxyHost
+
+		api, createErr := tgbotapi.NewBotAPIWithClient(cfg.Bot.Token, tgbotapi.APIEndpoint, httpClient)
+		if createErr == nil {
+			// Success!
+			bot := &Bot{
+				config:      cfg,
+				healthCheck: hc,
+				metrics:     m,
+				logger:      logger,
+				api:         api,
+				httpClient:  httpClient,
+				alertDone:   make(chan struct{}),
+				addSteps:    make(map[int64]*addStep),
+			}
+			logger.Info("Telegram bot initialized",
+				zap.String("username", api.Self.UserName),
+				zap.String("proxy", proxyHost))
+			return bot, nil
+		}
+
+		logger.Warn("Failed to initialize Telegram bot",
+			zap.Error(createErr),
+			zap.Int("attempt", totalAttempts),
+			zap.Int("max_retries", maxRetries),
+			zap.String("proxy", proxyHost))
+
+		// Check if we should switch proxy
+		if currentProxyAttempts >= maxRetriesPerProxy && totalAttempts < maxRetries {
+			logger.Info("Max retries per proxy reached, will try different proxy",
+				zap.Int("attempts_on_proxy", currentProxyAttempts),
+				zap.String("current_proxy", proxyHost))
+			currentProxyAttempts = 0
+			lastProxyHost = "" // Force different proxy on next iteration
+		}
+
+		if totalAttempts < maxRetries {
+			// Exponential backoff
+			sleepTime := retryDelay * time.Duration(totalAttempts)
+			logger.Info("Retrying bot initialization",
+				zap.Duration("delay", sleepTime),
+				zap.Int("attempt", totalAttempts+1))
+			time.Sleep(sleepTime)
+		}
 	}
 
-	logger.Info("Telegram bot initialized", zap.String("username", api.Self.UserName))
-
-	return bot, nil
+	return nil, fmt.Errorf("failed to create bot after %d attempts", maxRetries)
 }
 
 // Start starts the bot
@@ -754,4 +833,67 @@ func (b *Bot) handleAddStepInput(msg *tgbotapi.Message) {
 		b.mu.Unlock()
 		return
 	}
+}
+
+// createHTTPClientWithProxyAndHost creates an HTTP client with proxy and returns the proxy host
+// excludeHost allows excluding a specific proxy host (for retry with different proxy)
+func createHTTPClientWithProxyAndHost(hc *healthcheck.Checker, excludeHost string) (*http.Client, string, error) {
+	// Get healthy SOCKS5 upstreams
+	healthy := hc.GetHealthyUpstreams()
+	if len(healthy) == 0 {
+		return nil, "", fmt.Errorf("no healthy upstream available")
+	}
+
+	// Find best SOCKS5 upstream that's not excluded
+	var upstream *config.Upstream
+	for _, u := range healthy {
+		if u.Type == config.UpstreamTypeSOCKS5 && u.Host != excludeHost {
+			upstream = &u
+			break
+		}
+	}
+
+	// If all SOCKS5 are excluded, use the best one anyway
+	if upstream == nil {
+		for _, u := range healthy {
+			if u.Type == config.UpstreamTypeSOCKS5 {
+				upstream = &u
+				break
+			}
+		}
+	}
+
+	if upstream == nil {
+		return nil, "", fmt.Errorf("no healthy SOCKS5 upstream available")
+	}
+
+	// Build proxy URL
+	proxyHost := fmt.Sprintf("%s:%d", upstream.Host, upstream.Port)
+	proxyURL := &url.URL{
+		Scheme: "socks5",
+		Host:   proxyHost,
+	}
+
+	// Add authentication if credentials are provided
+	if upstream.Username != "" && upstream.Password != "" {
+		proxyURL.User = url.UserPassword(upstream.Username, upstream.Password)
+	}
+
+	// Create transport with proxy
+	transport := &http.Transport{
+		Proxy:                 http.ProxyURL(proxyURL),
+		TLSHandshakeTimeout:   30 * time.Second,
+		ExpectContinueTimeout: 10 * time.Second,
+	}
+
+	return &http.Client{
+		Transport: transport,
+		Timeout:   30 * time.Second,
+	}, proxyHost, nil
+}
+
+// createHTTPClientWithProxy creates an HTTP client that uses one of the available upstream proxies
+func createHTTPClientWithProxy(hc *healthcheck.Checker) (*http.Client, error) {
+	client, _, err := createHTTPClientWithProxyAndHost(hc, "")
+	return client, err
 }

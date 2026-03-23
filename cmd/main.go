@@ -22,8 +22,8 @@ import (
 
 func main() {
 	// Parse command line flags
-	configPath := flag.String("config", "../configs/config.yaml", "Path to configuration file (YAML)")
-	dbPath := flag.String("db", "../data/proxy-switcher.db", "Path to SQLite database")
+	configPath := flag.String("config", "", "Path to configuration file (YAML)")
+	dbPath := flag.String("db", "data/proxy-switcher.db", "Path to SQLite database")
 	flag.Parse()
 
 	// Load configuration
@@ -64,7 +64,29 @@ func main() {
 
 	upstreamRepo := database.NewUpstreamRepository(db)
 
-	// Seed database with config upstreams if empty
+	// Check if database is empty
+	existingUpstreams, err := upstreamRepo.List()
+	if err != nil {
+		logger.Error("Failed to check existing upstreams", zap.Error(err))
+		os.Exit(1)
+	}
+
+	// If database is empty, try to add bootstrap upstream from config
+	if len(existingUpstreams) == 0 && cfg.BootstrapUpstream != nil {
+		logger.Info("Database is empty, adding bootstrap upstream",
+			zap.String("name", cfg.BootstrapUpstream.Name),
+			zap.String("host", cfg.BootstrapUpstream.Host),
+			zap.Int("port", cfg.BootstrapUpstream.Port))
+
+		cfg.BootstrapUpstream.Enabled = true
+		if err := upstreamRepo.Create(*cfg.BootstrapUpstream); err != nil {
+			logger.Error("Failed to add bootstrap upstream", zap.Error(err))
+		} else {
+			logger.Info("Bootstrap upstream added successfully")
+		}
+	}
+
+	// Seed database with config upstreams if empty (legacy support)
 	if err := upstreamRepo.Seed(cfg.Upstreams); err != nil {
 		logger.Error("Failed to seed database", zap.Error(err))
 	}
@@ -95,7 +117,7 @@ func main() {
 
 	healthChecker.Start()
 
-	// Initialize Telegram bot
+	// Initialize Telegram bot (with retry support)
 	telegramBot, err := bot.NewBot(cfg, healthChecker, metricsCollector, logger)
 	if err != nil {
 		logger.Error("Failed to initialize Telegram bot", zap.Error(err))
