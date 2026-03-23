@@ -1,19 +1,17 @@
 # Telegram Proxy Manager
 
-[🇷🇺 Русская версия](README_ru.md)
+Сервис управления прокси для Telegram на Go. Служба принимает входящие соединения от клиентов Telegram через SOCKS5 или MTProto и маршрутизирует трафик через лучший доступный upstream-прокси на основе проверок.
 
-High-performance Telegram Proxy Manager service written in Go. This service acts as a proxy switcher, accepting incoming connections from Telegram clients via SOCKS5 or MTProto and routing them through the best available upstream proxy based on health checks.
+## 🚀 Возможности
 
-## Features
+- **Два протокола**: Поддержка входящих соединений SOCKS5 и MTProto
+- **Health Check**: Автоматический мониторинг здоровья upstream-прокси
+- **Умная маршрутизация**: Выбор лучшего прокси по задержке (latency)
+- **Автоматический failover**: Переподключение при смене upstream
+- **Prometheus метрики**: 13 метрик для мониторинга
+- **Telegram бот**: Управление прокси и алерты
 
-- **Dual Protocol Support**: Accepts incoming connections via SOCKS5 and MTProto
-- **Upstream Health Checking**: Automatic health monitoring of upstream proxies with configurable intervals
-- **Smart Routing**: Routes traffic through the healthiest upstream with lowest latency
-- **Automatic Failover**: Reconnection logic with automatic upstream switching on failure
-- **Prometheus Metrics**: Comprehensive metrics for monitoring (connections, latency, bytes transferred, upstream status)
-- **Telegram Bot Integration**: Bot for status queries and critical alerts
-
-## Architecture
+## 📐 Архитектура
 
 ```
 ┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
@@ -21,7 +19,7 @@ High-performance Telegram Proxy Manager service written in Go. This service acts
 │   (SOCKS5/      │     │  - Health Check  │     │   (SOCKS5/      │
 │    MTProto)     │     │  - Load Balancer │     │    MTProto)     │
 └─────────────────┘     │  - Metrics       │     └─────────────────┘
-                        │  - Bot Alerts    │
+                        │  - Bot           │
                         └──────────────────┘
                                  │
                                  ▼
@@ -31,126 +29,157 @@ High-performance Telegram Proxy Manager service written in Go. This service acts
                         └──────────────────┘
 ```
 
-## Project Structure
+## 📁 Структура проекта
 
 ```
 proxy-switcher/
 ├── cmd/
-│   └── main.go              # Application entry point
+│   └── main.go              # Точка входа
 ├── internal/
-│   ├── config/              # Configuration management
-│   ├── metrics/             # Prometheus metrics collector
-│   ├── healthcheck/         # Upstream health checking
-│   ├── proxy/               # SOCKS5 and MTProto proxy servers
-│   ├── router/              # Traffic routing logic
-│   └── bot/                 # Telegram bot integration
+│   ├── config/              # Конфигурация
+│   ├── metrics/             # Prometheus метрики
+│   ├── healthcheck/         # Проверка здоровья
+│   ├── proxy/               # SOCKS5 и MTProto серверы
+│   ├── router/              # Маршрутизация
+│   └── bot/                 # Telegram бот
 ├── configs/
-│   └── config.example.yaml  # Example configuration
+│   └── config.default.yaml  # Пример конфигурации
 ├── deploy/
-│   ├── prometheus.yml       # Prometheus configuration
-│   └── grafana/             # Grafana dashboards
+│   ├── prometheus.yml       # Конфиг Prometheus
+│   └── grafana/             # Дашборды Grafana
 ├── Dockerfile
 ├── docker-compose.yml
 └── README.md
 ```
 
-## Quick Start
+## ⚡ Быстрый старт
 
-### Using Docker Compose
+### Через Docker Compose
 
-1. Clone the repository:
+1. Клонировать репозиторий:
 ```bash
 git clone https://github.com/Nakray/proxy-switcher.git
 cd proxy-switcher
 ```
 
-2. Copy and edit the configuration:
+2. Скопировать и настроить конфигурацию:
 ```bash
 cp configs/config.example.yaml configs/config.yaml
-# Edit configs/config.yaml with your upstream proxies
+# Отредактируйте configs/config.yaml
 ```
 
-3. Start the service:
+3. Запустить сервис:
 ```bash
 docker-compose up -d
 ```
 
-4. With monitoring stack (Prometheus + Grafana):
+4. С мониторингом (Prometheus + Grafana):
 ```bash
 docker-compose --profile monitoring up -d
 ```
 
-### Manual Build
+### Ручная сборка
 
 ```bash
-# Build
+# Сборка
 go build -o proxy-switcher ./cmd/
 
-# Run with config file
+# Запуск с конфигом
 ./proxy-switcher -config configs/config.yaml
 
-# Or run with environment variables
+# Или через переменные окружения
 export PROXY_SOCKS5_PORT=1080
-export PROXY_MTProto_PORT=2080
-export BOT_TOKEN="your-bot-token"
+export BOT_TOKEN="ваш-токен"
 ./proxy-switcher
 ```
 
-## Configuration
+## ⚙️ Конфигурация
 
-### Data Storage
+### Хранение данных
 
-The service uses **SQLite** to store upstream configuration. All changes made via the Telegram bot are persisted and survive restarts.
+Сервис использует **SQLite** для хранения конфигурации upstream'ов. Все изменения, сделанные через Telegram бота, сохраняются в базу данных и сохраняются после перезапуска.
 
-- **Default DB path**: `data/proxy-switcher.db`
-- **CLI flag**: `-db path/to/database.db`
-- **Initialization**: Database is created automatically on first run
-- **Seed data**: Upstreams from config are loaded only if DB is empty
+- **Путь к БД по умолчанию**: `data/proxy-switcher.db`
+- **Параметр CLI**: `-db path/to/database.db`
+- **Инициализация**: При первом запуске база создаётся автоматически
+- **Seed данных**: Upstream'ы из конфига загружаются только если БД пустая
 
-### Configuration Methods
+### YAML конфигурация
 
-**Environment variables are NOT used.** All configuration is done via YAML file or CLI flags.
+Пример в `configs/config.default.yaml`:
 
-| Flag | Description | Default |
-|------|-------------|---------|
-| `-config` | Path to YAML config file | - |
-| `-db` | Path to SQLite database | `data/proxy-switcher.db` |
+```yaml
+proxy:
+  socks5_port: 1080
+  mtproto_port: 2080
+  enabled: true
 
-### YAML Configuration
+# Upstream'ы из конфига загружаются только при первом запуске
+# Далее управление через Telegram бота
+upstreams:
+  - name: "proxy1"
+    type: "socks5"
+    host: "proxy.example.com"
+    port: 1080
+    username: "user"
+    password: "pass"
+    enabled: true
 
-See `configs/config.example.yaml` for a complete example.
+health_check:
+  interval: 10s
+  timeout: 5s
+  unhealthy_threshold: 3
 
-### Environment Variables
+bot:
+  enabled: true
+  token: "YOUR_BOT_TOKEN"
+  admin_chat_ids: [123456789]
+  alert_interval: 5m
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `PROXY_SOCKS5_PORT` | SOCKS5 listener port | 1080 |
-| `PROXY_MTProto_PORT` | MTProto listener port | 2080 |
-| `PROXY_ENABLED` | Enable proxy listeners | true |
-| `HEALTH_CHECK_INTERVAL` | Health check interval | 10s |
-| `HEALTH_CHECK_TIMEOUT` | Health check timeout | 5s |
-| `METRICS_PORT` | Prometheus metrics port | 9090 |
-| `METRICS_ENABLED` | Enable metrics | true |
-| `BOT_TOKEN` | Telegram bot token | - |
-| `BOT_ADMIN_CHAT_IDS` | Admin chat IDs (JSON array) | - |
-| `LOG_LEVEL` | Logging level | info |
+metrics:
+  enabled: true
+  port: 9090
 
-## Telegram Bot Commands
+log_level: "info"
+```
 
-### Status Commands
-- `/start` or `/help` - Show help message
-- `/status` - Show current proxy status
-- `/upstreams` - List all upstreams with health status
-- `/metrics` - Show metrics summary
+### Переменные окружения
 
-### Management Commands
-- `/manage` - Open interactive management menu
-- `/add <name> <type> <host> <port> [username] [password]` - Add new upstream
-- `/remove <name>` - Remove upstream
-- `/enable <name>` - Enable upstream
-- `/disable <name>` - Disable upstream
+**Не используются.** Вся конфигурация осуществляется через YAML файл или CLI флаги.
 
-**Examples:**
+| Переменная | Описание |
+|------------|----------|
+| `TZ` | Часовой пояс (для Docker) |
+
+### CLI флаги
+
+| Флаг | Описание | По умолчанию |
+|------|----------|--------------|
+| `-config` | Путь к YAML конфигу | - |
+| `-db` | Путь к SQLite базе | `data/proxy-switcher.db` |
+
+## 🤖 Telegram бот
+
+### Команды статуса
+
+| Команда | Описание |
+|---------|----------|
+| `/start` или `/help` | Показать справку |
+| `/status` | Текущий статус прокси |
+| `/upstreams` | Список upstream'ов со статусом |
+| `/metrics` | Сводка метрик |
+
+### Команды управления
+
+| Команда | Описание |
+|---------|----------|
+| `/manage` | Интерактивное меню |
+| `/add <name> <type> <host> <port> [user] [pass]` | Добавить upstream |
+| `/remove <name>` | Удалить upstream |
+| `/enable <name>` | Включить upstream |
+| `/disable <name>` | Отключить upstream |
+
+**Примеры:**
 ```
 /add myproxy socks5 proxy.example.com 1080 user pass
 /add mtproxy mtproto mt.example.com 443
@@ -159,146 +188,138 @@ See `configs/config.example.yaml` for a complete example.
 /remove myproxy
 ```
 
-### Interactive Management
+### Интерактивное меню
 
-The `/manage` command opens an interactive menu with inline buttons:
-- ⏸️/▶️ - Disable/Enable upstream
-- 🗑️ - Remove upstream (with confirmation)
-- 🔄 - Refresh status
-- ➕ - Add new upstream
+Команда `/manage` открывает меню с кнопками:
+- ⏸️/▶️ — Отключить/Включить прокси
+- 🗑️ — Удалить (с подтверждением)
+- 🔄 — Обновить статус
 
-## Metrics
+### Статусы upstream'ов
 
-The service exposes Prometheus metrics on port 9090:
+- 🟢 — Здоров и включён
+- 🔴 — Нездоров (failed health check)
+- ⚪ — Отключён вручную
 
-| Metric | Description |
-|--------|-------------|
-| `proxy_active_connections` | Current active connections |
-| `proxy_total_connections` | Total connections since start |
-| `proxy_connection_duration_seconds` | Connection duration histogram |
-| `proxy_bytes_transferred_total` | Total bytes transferred |
-| `upstream_latency_milliseconds` | Upstream latency by name/type |
-| `upstream_health_status` | Upstream health (1=healthy, 0=unhealthy) |
-| `upstream_requests_total` | Requests forwarded to upstream |
-| `upstream_failures_total` | Upstream connection failures |
-| `upstream_reconnects_total` | Upstream reconnection attempts |
-| `health_check_duration_seconds` | Health check duration |
-| `health_check_errors_total` | Health check errors |
-| `bot_messages_sent_total` | Messages sent by bot |
-| `bot_commands_total` | Bot commands received |
+## 📊 Метрики
 
-### Grafana Dashboard
+Сервис предоставляет метрики Prometheus на порту 9090:
 
-Access Grafana at `http://localhost:3000` (default credentials: admin/admin).
+| Метрика | Описание |
+|---------|----------|
+| `proxy_active_connections` | Активные соединения |
+| `proxy_total_connections` | Всего соединений |
+| `proxy_connection_duration_seconds` | Длительность соединений |
+| `proxy_bytes_transferred_total` | Переданные байты |
+| `upstream_latency_milliseconds` | Задержка upstream'ов |
+| `upstream_health_status` | Статус (1=здоров, 0=нет) |
+| `upstream_requests_total` | Запросы к upstream |
+| `upstream_failures_total` | Ошибки upstream |
+| `upstream_reconnects_total` | Переподключения |
+| `health_check_duration_seconds` | Длительность проверок |
+| `bot_messages_sent_total` | Сообщений бота |
+| `bot_commands_total` | Команд бота |
 
-The pre-configured dashboard includes:
-- Active/Total connections
-- Bytes transferred
-- Upstream health status
-- Latency graphs
-- Request rates
-- Failure rates
+### Grafana дашборд
 
-## API Endpoints
+Доступен по адресу `http://localhost:3000`
 
-| Endpoint | Description |
-|----------|-------------|
-| `GET /metrics` | Prometheus metrics |
-| `GET /health` | Health check endpoint |
+Включает:
+- Активные/всего соединений
+- Переданные байты
+- Статус upstream'ов
+- Графики задержек
+- Частота запросов
+- Частота ошибок
 
-## Upstream Configuration
+## 🔌 Настройка upstream'ов
 
-### SOCKS5 Upstream
+### SOCKS5 upstream
 
 ```yaml
 upstreams:
-  - name: "my-socks5-proxy"
+  - name: "my-socks5"
     type: "socks5"
     host: "proxy.example.com"
     port: 1080
-    username: "user"      # Optional
-    password: "pass"      # Optional
+    username: "user"      # Опционально
+    password: "pass"      # Опционально
+    enabled: true
 ```
 
-### MTProto Upstream
+### MTProto upstream
 
 ```yaml
 upstreams:
-  - name: "my-mtproto-proxy"
+  - name: "my-mtproto"
     type: "mtproto"
     host: "mtproxy.example.com"
     port: 443
-    secret: "dd00000000000000000000000000000000"  # Optional
+    secret: "dd00000000000000000000000000000000"
+    enabled: true
 ```
 
-## Development
+## 🌐 API эндпоинты
 
-### Running Tests
+| Эндпоинт | Описание |
+|----------|----------|
+| `GET /metrics` | Prometheus метрики |
+| `GET /health` | Проверка здоровья |
+
+## 🛠️ Разработка
+
+### Запуск тестов
 
 ```bash
 go test ./...
 ```
 
-### Building Docker Image
+### Сборка Docker образа
 
 ```bash
 docker build -t proxy-switcher .
 ```
 
-## Production Deployment
+### Тестовый скрипт
 
-### Recommended VPS Specifications
+```bash
+./scripts/test.sh
+```
 
-- CPU: 1+ cores
-- RAM: 512MB+ 
-- Storage: 1GB+
-- Network: 100Mbps+
+### Мониторинг
 
-### Security Considerations
+1. Настройте Prometheus на сбор метрик
+2. Импортируйте дашборд Grafana из `deploy/grafana/`
+3. Настройте алерты:
+   - Все upstream'ы недоступны
+   - Высокий процент ошибок
+   - Высокая задержка
 
-1. **Firewall**: Only expose necessary ports (1080, 2080, 9090)
-2. **TLS**: Consider putting behind a reverse proxy with TLS
-3. **Authentication**: Use SOCKS5 authentication for client access
-4. **Secrets**: Never commit secrets to version control
-5. **Updates**: Keep the service updated for security patches
+## 🔧 Решение проблем
 
-### Monitoring Setup
+### Все upstream'ы недоступны
 
-1. Configure Prometheus to scrape metrics
-2. Import Grafana dashboard from `deploy/grafana/`
-3. Set up alerts for:
-   - All upstreams down
-   - High failure rate
-   - High latency
+1. Проверьте сеть до upstream'ов
+2. Проверьте учётные данные
+3. Посмотрите логи: `docker-compose logs proxy-switcher`
 
-## Troubleshooting
+### Высокая задержка
 
-### All Upstreams Down
+1. Проверьте метрики задержек
+2. Добавьте географически близкие upstream'ы
+3. Уменьшите интервал health check
 
-1. Check network connectivity to upstreams
-2. Verify upstream proxy credentials
-3. Check health check logs: `docker-compose logs proxy-switcher`
+### Проблемы с соединениями
 
-### High Latency
+1. Проверьте правила файрвола
+2. Убедитесь что порты свободны: `netstat -tlnp`
+3. Проверьте логи на ошибки
 
-1. Review upstream latency metrics
-2. Consider adding geographically closer upstreams
-3. Adjust health check interval for faster detection
+## 📝 Логи
 
-### Connection Issues
+Уровни логирования: `debug`, `info`, `warn`, `error`
 
-1. Verify firewall rules allow incoming connections
-2. Check if ports are not in use: `netstat -tlnp`
-3. Review application logs for errors
-
-## License
-
-MIT License - see LICENSE file for details.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## Support
-
-For issues and feature requests, please use GitHub Issues.
+Пример просмотра логов:
+```bash
+docker-compose logs -f proxy-switcher
+```
