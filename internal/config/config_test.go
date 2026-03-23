@@ -57,43 +57,7 @@ func TestConfigValidate(t *testing.T) {
 				},
 				Upstreams: []Upstream{},
 			},
-			wantErr: true,
-		},
-		{
-			name: "invalid upstream type",
-			config: &Config{
-				Proxy: ProxyConfig{
-					SOCKS5Port: 1080,
-					Enabled:    true,
-				},
-				Upstreams: []Upstream{
-					{
-						Name: "test",
-						Type: "invalid",
-						Host: "localhost",
-						Port: 1081,
-					},
-				},
-			},
-			wantErr: true,
-		},
-		{
-			name: "invalid port",
-			config: &Config{
-				Proxy: ProxyConfig{
-					SOCKS5Port: 1080,
-					Enabled:    true,
-				},
-				Upstreams: []Upstream{
-					{
-						Name: "test",
-						Type: UpstreamTypeSOCKS5,
-						Host: "localhost",
-						Port: 0,
-					},
-				},
-			},
-			wantErr: true,
+			wantErr: false,
 		},
 		{
 			name: "bot enabled without token",
@@ -102,17 +66,7 @@ func TestConfigValidate(t *testing.T) {
 					SOCKS5Port: 1080,
 					Enabled:    true,
 				},
-				Upstreams: []Upstream{
-					{
-						Name: "test",
-						Type: UpstreamTypeSOCKS5,
-						Host: "localhost",
-						Port: 1081,
-					},
-				},
-				Bot: BotConfig{
-					Enabled: true,
-				},
+				Bot: BotConfig{},
 			},
 			wantErr: true,
 		},

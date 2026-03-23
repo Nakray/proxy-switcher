@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 
+	_ "github.com/mattn/go-sqlite3"
 	"go.uber.org/zap"
 
 	"github.com/Nakray/proxy-switcher/internal/config"

@@ -29,6 +29,19 @@ type Bot struct {
 	alertTicker   *time.Ticker
 	alertDone     chan struct{}
 	lastAlertTime time.Time
+
+	// State for step-by-step upstream addition
+	addSteps map[int64]*addStep
+}
+
+// addStep represents the current step in adding an upstream
+type addStep struct {
+	name     string
+	typ      config.UpstreamType
+	host     string
+	port     int
+	username string
+	password string
 }
 
 // NewBot creates a new Telegram bot
@@ -38,8 +51,8 @@ func NewBot(
 	m *metrics.SafeCollector,
 	logger *zap.Logger,
 ) (*Bot, error) {
-	if !cfg.Bot.Enabled || cfg.Bot.Token == "" {
-		logger.Info("Telegram bot is disabled")
+	if cfg.Bot.Token == "" {
+		logger.Info("has not bot token")
 		return nil, nil
 	}
 
@@ -55,6 +68,7 @@ func NewBot(
 		logger:      logger,
 		api:         api,
 		alertDone:   make(chan struct{}),
+		addSteps:    make(map[int64]*addStep),
 	}
 
 	logger.Info("Telegram bot initialized", zap.String("username", api.Self.UserName))
@@ -123,6 +137,16 @@ func (b *Bot) handleMessage(msg *tgbotapi.Message) {
 		return
 	}
 
+	// Check if user is in the middle of adding upstream
+	b.mu.Lock()
+	_, inAddFlow := b.addSteps[msg.Chat.ID]
+	b.mu.Unlock()
+
+	if inAddFlow {
+		b.handleAddStepInput(msg)
+		return
+	}
+
 	command := strings.TrimPrefix(text, "/")
 	parts := strings.SplitN(command, "@", 2)
 	cmd := strings.ToLower(parts[0])
@@ -168,6 +192,8 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 		b.sendUpstreams(callback.Message.Chat.ID)
 	case data == "back_menu":
 		b.sendManageMenu(callback.Message.Chat.ID)
+	case data == "add_upstream":
+		b.startAddUpstreamFlow(callback)
 	case strings.HasPrefix(data, "enable_"):
 		name := strings.TrimPrefix(data, "enable_")
 		b.enableUpstreamCallback(callback, name)
@@ -329,7 +355,7 @@ func (b *Bot) sendManageMenu(chatID int64) {
 	// Add action buttons
 	var actionRow []tgbotapi.InlineKeyboardButton
 	actionRow = append(actionRow, tgbotapi.NewInlineKeyboardButtonData("🔄 Refresh", "refresh_upstreams"))
-	actionRow = append(actionRow, tgbotapi.NewInlineKeyboardButtonData("➕ Add", "add_placeholder"))
+	actionRow = append(actionRow, tgbotapi.NewInlineKeyboardButtonData("➕ Add", "add_upstream"))
 	rows = append(rows, actionRow)
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(rows...)
@@ -605,5 +631,127 @@ func (b *Bot) SendUpstreamRecoveredAlert(upstreamName, upstreamType string) {
 	for _, chatID := range b.config.Bot.AdminChatIDs {
 		msg.ChatID = chatID
 		b.sendMessage(msg)
+	}
+}
+
+// Step-by-step upstream addition flow
+
+func (b *Bot) startAddUpstreamFlow(callback *tgbotapi.CallbackQuery) {
+	b.answerCallback(callback, "")
+	
+	b.mu.Lock()
+	b.addSteps[callback.Message.Chat.ID] = &addStep{}
+	b.mu.Unlock()
+
+	msg := tgbotapi.NewMessage(callback.Message.Chat.ID, 
+		"➕ *Adding New Upstream*\n\n"+
+		"Let's configure your upstream step by step.\n\n"+
+		"Step 1/6: Enter the upstream *name* (e.g., `my-proxy-1`):")
+	msg.ParseMode = "Markdown"
+	b.sendMessage(msg)
+}
+
+func (b *Bot) handleAddStepInput(msg *tgbotapi.Message) {
+	b.mu.Lock()
+	step, exists := b.addSteps[msg.Chat.ID]
+	b.mu.Unlock()
+
+	if !exists {
+		return
+	}
+
+	text := strings.TrimSpace(msg.Text)
+
+	if step.name == "" {
+		step.name = text
+		b.sendMessage(tgbotapi.NewMessage(msg.Chat.ID,
+			"Step 2/6: Enter the upstream *type*:\n"+
+			"- `socks5` - SOCKS5 proxy\n"+
+			"- `mtproto` - MTProto proxy\n\n"+
+			"Send: `socks5` or `mtproto`"))
+		return
+	}
+
+	if step.typ == "" {
+		typ := config.UpstreamType(strings.ToLower(text))
+		if typ != config.UpstreamTypeSOCKS5 && typ != config.UpstreamTypeMTProto {
+			b.sendMessage(tgbotapi.NewMessage(msg.Chat.ID,
+				"❌ Invalid type. Please send `socks5` or `mtproto`"))
+			return
+		}
+		step.typ = typ
+		b.sendMessage(tgbotapi.NewMessage(msg.Chat.ID,
+			"Step 3/6: Enter the upstream *host* (e.g., `proxy.example.com` or `192.168.1.1`):"))
+		return
+	}
+
+	if step.host == "" {
+		step.host = text
+		b.sendMessage(tgbotapi.NewMessage(msg.Chat.ID,
+			"Step 4/6: Enter the upstream *port* (e.g., `1080`):"))
+		return
+	}
+
+	if step.port == 0 {
+		port, err := strconv.Atoi(text)
+		if err != nil || port <= 0 || port > 65535 {
+			b.sendMessage(tgbotapi.NewMessage(msg.Chat.ID,
+				"❌ Invalid port. Please send a number between 1 and 65535"))
+			return
+		}
+		step.port = port
+		b.sendMessage(tgbotapi.NewMessage(msg.Chat.ID,
+			"Step 5/6: Enter *username* (optional, send `-` to skip):"))
+		return
+	}
+
+	if step.username == "" {
+		if text != "-" {
+			step.username = text
+		}
+		b.sendMessage(tgbotapi.NewMessage(msg.Chat.ID,
+			"Step 6/6: Enter *password* (optional, send `-` to skip):"))
+		return
+	}
+
+	if step.password == "" {
+		if text != "-" {
+			step.password = text
+		}
+
+		// Create upstream
+		upstream := config.Upstream{
+			Name:     step.name,
+			Type:     step.typ,
+			Host:     step.host,
+			Port:     step.port,
+			Username: step.username,
+			Password: step.password,
+			Enabled:  true,
+		}
+
+		if err := b.healthCheck.AddUpstream(upstream); err != nil {
+			b.sendMessage(tgbotapi.NewMessage(msg.Chat.ID,
+				fmt.Sprintf("❌ Error adding upstream: %v", err)))
+			b.mu.Lock()
+			delete(b.addSteps, msg.Chat.ID)
+			b.mu.Unlock()
+			return
+		}
+
+		authStr := ""
+		if step.username != "" && step.password != "" {
+			authStr = fmt.Sprintf("\nAuth: %s:***", step.username)
+		}
+
+		b.sendMessage(tgbotapi.NewMessage(msg.Chat.ID,
+			fmt.Sprintf("✅ Upstream *%s* added successfully!\n\nHost: %s:%d\nType: %s%s",
+				step.name, step.host, step.port, step.typ, authStr)))
+
+		// Cleanup
+		b.mu.Lock()
+		delete(b.addSteps, msg.Chat.ID)
+		b.mu.Unlock()
+		return
 	}
 }

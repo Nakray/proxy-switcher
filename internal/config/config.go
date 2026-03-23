@@ -13,7 +13,7 @@ import (
 type UpstreamType string
 
 const (
-	UpstreamTypeSOCKS5 UpstreamType = "socks5"
+	UpstreamTypeSOCKS5  UpstreamType = "socks5"
 	UpstreamTypeMTProto UpstreamType = "mtproto"
 )
 
@@ -33,18 +33,17 @@ type Upstream struct {
 
 // HealthCheckConfig holds health check configuration
 type HealthCheckConfig struct {
-	Interval     time.Duration `yaml:"interval" json:"interval"`
-	Timeout      time.Duration `yaml:"timeout" json:"timeout"`
-	MaxRetries   int           `yaml:"max_retries" json:"max_retries"`
-	UnhealthyThreshold int     `yaml:"unhealthy_threshold" json:"unhealthy_threshold"`
+	Interval           time.Duration `yaml:"interval" json:"interval"`
+	Timeout            time.Duration `yaml:"timeout" json:"timeout"`
+	MaxRetries         int           `yaml:"max_retries" json:"max_retries"`
+	UnhealthyThreshold int           `yaml:"unhealthy_threshold" json:"unhealthy_threshold"`
 }
 
 // BotConfig holds Telegram bot configuration
 type BotConfig struct {
-	Enabled        bool          `yaml:"enabled" json:"enabled"`
-	Token          string        `yaml:"token" json:"token"`
-	AdminChatIDs   []int64       `yaml:"admin_chat_ids" json:"admin_chat_ids"`
-	AlertInterval  time.Duration `yaml:"alert_interval" json:"alert_interval"`
+	Token         string        `yaml:"token" json:"token"`
+	AdminChatIDs  []int64       `yaml:"admin_chat_ids" json:"admin_chat_ids"`
+	AlertInterval time.Duration `yaml:"alert_interval" json:"alert_interval"`
 }
 
 // MetricsConfig holds Prometheus metrics configuration
@@ -56,9 +55,9 @@ type MetricsConfig struct {
 
 // ProxyConfig holds the main proxy listener configuration
 type ProxyConfig struct {
-	SOCKS5Port int  `yaml:"socks5_port" json:"socks5_port"`
-	MTProtoPort int `yaml:"mtproto_port" json:"mtproto_port"`
-	Enabled    bool `yaml:"enabled" json:"enabled"`
+	SOCKS5Port  int  `yaml:"socks5_port" json:"socks5_port"`
+	MTProtoPort int  `yaml:"mtproto_port" json:"mtproto_port"`
+	Enabled     bool `yaml:"enabled" json:"enabled"`
 }
 
 // Config holds the entire application configuration
@@ -75,18 +74,17 @@ type Config struct {
 func DefaultConfig() *Config {
 	return &Config{
 		Proxy: ProxyConfig{
-			SOCKS5Port: 1080,
+			SOCKS5Port:  1080,
 			MTProtoPort: 2080,
-			Enabled:    true,
+			Enabled:     true,
 		},
 		HealthCheck: HealthCheckConfig{
-			Interval:     10 * time.Second,
-			Timeout:      5 * time.Second,
-			MaxRetries:   3,
+			Interval:           10 * time.Second,
+			Timeout:            5 * time.Second,
+			MaxRetries:         3,
 			UnhealthyThreshold: 3,
 		},
 		Bot: BotConfig{
-			Enabled:       false,
 			AlertInterval: 5 * time.Minute,
 		},
 		Metrics: MetricsConfig{
@@ -114,13 +112,6 @@ func LoadFromFile(path string) (*Config, error) {
 	applyEnvOverrides(config)
 
 	return config, nil
-}
-
-// LoadFromEnv loads configuration from environment variables
-func LoadFromEnv() *Config {
-	config := DefaultConfig()
-	applyEnvOverrides(config)
-	return config
 }
 
 func applyEnvOverrides(config *Config) {
@@ -154,7 +145,6 @@ func applyEnvOverrides(config *Config) {
 	// Bot settings
 	if val := os.Getenv("BOT_TOKEN"); val != "" {
 		config.Bot.Token = val
-		config.Bot.Enabled = true
 	}
 	if val := os.Getenv("BOT_ADMIN_CHAT_IDS"); val != "" {
 		config.Bot.AdminChatIDs = parseIntSlice(val)
@@ -180,7 +170,7 @@ func parseInt(s string) int {
 func parseIntSlice(s string) []int64 {
 	var result []int64
 	var ids []json.Number
-	
+
 	// Try to parse as JSON array first
 	if err := json.Unmarshal([]byte(s), &ids); err == nil {
 		for _, id := range ids {
@@ -190,7 +180,7 @@ func parseIntSlice(s string) []int64 {
 		}
 		return result
 	}
-	
+
 	// Fallback: comma-separated values
 	fmt.Sscanf(s, "%d", &result)
 	return result
@@ -214,25 +204,12 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("at least one proxy port must be specified")
 	}
 
-	if c.Bot.Enabled && c.Bot.Token == "" {
+	if c.Bot.Token == "" {
 		return fmt.Errorf("bot token is required when bot is enabled")
 	}
 
-	if len(c.Upstreams) == 0 {
-		return fmt.Errorf("at least one upstream must be configured")
-	}
-
-	for i, upstream := range c.Upstreams {
-		if upstream.Host == "" {
-			return fmt.Errorf("upstream[%d]: host is required", i)
-		}
-		if upstream.Port <= 0 || upstream.Port > 65535 {
-			return fmt.Errorf("upstream[%d]: invalid port", i)
-		}
-		if upstream.Type != UpstreamTypeSOCKS5 && upstream.Type != UpstreamTypeMTProto {
-			return fmt.Errorf("upstream[%d]: invalid type (must be 'socks5' or 'mtproto')", i)
-		}
-	}
+	// Upstreams are now loaded from database, not from config
+	// Validation of upstreams happens at runtime when they are added via bot
 
 	return nil
 }
@@ -245,7 +222,7 @@ func (c *Config) String() string {
 		safeConfig.Upstreams[i].Secret = "***"
 	}
 	safeConfig.Bot.Token = "***"
-	
+
 	data, _ := yaml.Marshal(&safeConfig)
 	return string(data)
 }

@@ -22,22 +22,18 @@ import (
 
 func main() {
 	// Parse command line flags
-	configPath := flag.String("config", "", "Path to configuration file (YAML)")
-	dbPath := flag.String("db", "data/proxy-switcher.db", "Path to SQLite database")
+	configPath := flag.String("config", "../configs/config.yaml", "Path to configuration file (YAML)")
+	dbPath := flag.String("db", "../data/proxy-switcher.db", "Path to SQLite database")
 	flag.Parse()
 
 	// Load configuration
 	var cfg *config.Config
 	var err error
 
-	if *configPath != "" {
-		cfg, err = config.LoadFromFile(*configPath)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
-			os.Exit(1)
-		}
-	} else {
-		cfg = config.LoadFromEnv()
+	cfg, err = config.LoadFromFile(*configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
+		os.Exit(1)
 	}
 
 	// Validate configuration

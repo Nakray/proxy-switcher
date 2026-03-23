@@ -28,7 +28,7 @@ RUN apk add --no-cache ca-certificates tzdata
 COPY --from=builder /app/proxy-switcher /app/proxy-switcher
 
 # Copy default config
-COPY configs/config.example.yaml /app/config.yaml
+COPY configs/config.yaml /app/config.yaml
 
 # Create data directory for SQLite database
 RUN mkdir -p /app/data
@@ -46,7 +46,7 @@ EXPOSE 1080 2080 9090
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-    wget --no-verbose --tries=1 --spider http://localhost:9090/health || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:9090/health || exit 1
 
 # Run the application
 ENTRYPOINT ["/app/proxy-switcher"]

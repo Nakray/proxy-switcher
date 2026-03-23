@@ -67,13 +67,6 @@ export BOT_TOKEN="ваш-токен"
 
 Пример в `configs/config.default.yaml`:
 
-### CLI флаги
-
-| Флаг | Описание | По умолчанию |
-|------|----------|--------------|
-| `-config` | Путь к YAML конфигу | - |
-| `-db` | Путь к SQLite базе | `data/proxy-switcher.db` |
-
 ## 🤖 Telegram бот
 
 ### Команды статуса
