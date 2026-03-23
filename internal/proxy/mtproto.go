@@ -7,10 +7,12 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"sync"
+	"syscall"
 	"time"
 
 	"go.uber.org/zap"
@@ -113,8 +115,16 @@ func (p *MTProtoProxy) acceptLoop() {
 
 		conn, err := p.listener.Accept()
 		if err != nil {
-			if ne, ok := err.(net.Error); ok && ne.Temporary() {
+			var netErr net.Error
+			if errors.As(err, &netErr) && netErr.Timeout() {
 				continue
+			}
+			// Check for syscall errors that should be ignored
+			var sysErr syscall.Errno
+			if errors.As(err, &sysErr) {
+				if sysErr == syscall.EINTR || sysErr == syscall.ECONNABORTED {
+					continue
+				}
 			}
 			p.logger.Debug("MTProto accept error", zap.Error(err))
 			return

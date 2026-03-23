@@ -91,11 +91,11 @@ func NewBot(
 				logger.Warn("Failed to create HTTP client with proxy, using direct connection",
 					zap.Error(err),
 					zap.Int("attempt", totalAttempts))
-				httpClient = &http.Client{Timeout: 30 * time.Second}
+				httpClient = &http.Client{Timeout: 80 * time.Second}
 				proxyHost = "direct"
 			}
 		} else {
-			httpClient = &http.Client{Timeout: 30 * time.Second}
+			httpClient = &http.Client{Timeout: 80 * time.Second}
 			proxyHost = "direct"
 		}
 
@@ -886,9 +886,10 @@ func createHTTPClientWithProxyAndHost(hc *healthcheck.Checker, excludeHost strin
 		ExpectContinueTimeout: 10 * time.Second,
 	}
 
+	// Timeout should be longer than Telegram long polling timeout (60s)
 	return &http.Client{
 		Transport: transport,
-		Timeout:   30 * time.Second,
+		Timeout:   80 * time.Second,
 	}, proxyHost, nil
 }
 
