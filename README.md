@@ -11,47 +11,6 @@
 - **Prometheus метрики**: 13 метрик для мониторинга
 - **Telegram бот**: Управление прокси и алерты
 
-## 📐 Архитектура
-
-```
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│ Telegram Client │────▶│ Proxy Manager    │────▶│ Upstream Proxy  │
-│   (SOCKS5/      │     │  - Health Check  │     │   (SOCKS5/      │
-│    MTProto)     │     │  - Load Balancer │     │    MTProto)     │
-└─────────────────┘     │  - Metrics       │     └─────────────────┘
-                        │  - Bot           │
-                        └──────────────────┘
-                                 │
-                                 ▼
-                        ┌──────────────────┐
-                        │   Prometheus     │
-                        │   / Grafana      │
-                        └──────────────────┘
-```
-
-## 📁 Структура проекта
-
-```
-proxy-switcher/
-├── cmd/
-│   └── main.go              # Точка входа
-├── internal/
-│   ├── config/              # Конфигурация
-│   ├── metrics/             # Prometheus метрики
-│   ├── healthcheck/         # Проверка здоровья
-│   ├── proxy/               # SOCKS5 и MTProto серверы
-│   ├── router/              # Маршрутизация
-│   └── bot/                 # Telegram бот
-├── configs/
-│   └── config.default.yaml  # Пример конфигурации
-├── deploy/
-│   ├── prometheus.yml       # Конфиг Prometheus
-│   └── grafana/             # Дашборды Grafana
-├── Dockerfile
-├── docker-compose.yml
-└── README.md
-```
-
 ## ⚡ Быстрый старт
 
 ### Через Docker Compose
@@ -97,7 +56,7 @@ export BOT_TOKEN="ваш-токен"
 
 ### Хранение данных
 
-Сервис использует **SQLite** для хранения конфигурации upstream'ов. Все изменения, сделанные через Telegram бота, сохраняются в базу данных и сохраняются после перезапуска.
+Сервис использует **SQLite** для хранения конфигурации upstream'ов.
 
 - **Путь к БД по умолчанию**: `data/proxy-switcher.db`
 - **Параметр CLI**: `-db path/to/database.db`
@@ -294,26 +253,6 @@ docker build -t proxy-switcher .
    - Все upstream'ы недоступны
    - Высокий процент ошибок
    - Высокая задержка
-
-## 🔧 Решение проблем
-
-### Все upstream'ы недоступны
-
-1. Проверьте сеть до upstream'ов
-2. Проверьте учётные данные
-3. Посмотрите логи: `docker-compose logs proxy-switcher`
-
-### Высокая задержка
-
-1. Проверьте метрики задержек
-2. Добавьте географически близкие upstream'ы
-3. Уменьшите интервал health check
-
-### Проблемы с соединениями
-
-1. Проверьте правила файрвола
-2. Убедитесь что порты свободны: `netstat -tlnp`
-3. Проверьте логи на ошибки
 
 ## 📝 Логи
 
