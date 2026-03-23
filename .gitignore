@@ -47,3 +47,6 @@ data/*.db
 data/*.db-journal
 data/*.db-wal
 data/*.db-shm
+
+# Config
+configs/config.yaml
