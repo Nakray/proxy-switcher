@@ -1,0 +1,43 @@
+# Proxy Manager Configuration
+# This is the main configuration file for the Proxy Manager service.
+
+# Proxy listener settings
+proxy:
+  # SOCKS5 proxy port (incoming connections from Telegram clients)
+  socks5_port: 1080
+  # MTProto proxy port (incoming connections from Telegram clients)
+  mtproto_port: 2080
+  # Enable/disable proxy listeners
+  enabled: true
+
+# Health check settings
+health_check:
+  # How often to check upstream health
+  interval: 10s
+  # Timeout for each health check
+  timeout: 5s
+  # Number of retries before marking upstream as unhealthy
+  max_retries: 3
+  # Number of consecutive failures before marking upstream as unhealthy
+  unhealthy_threshold: 3
+
+# Telegram bot settings (optional but recommended)
+bot:
+  # Enable/disable bot
+  enabled: false
+  # Bot token from @BotFather (required if enabled)
+  token: "YOUR_BOT_TOKEN_HERE"
+  # Admin chat IDs that can receive alerts and use commands
+  admin_chat_ids:
+    - 123456789
+  # How often to send alerts when all upstreams are down
+  alert_interval: 5m
+
+# Prometheus metrics settings
+metrics:
+  enabled: true
+  port: 9090
+  path: "/metrics"
+
+# Logging level: debug, info, warn, error
+log_level: "info"
