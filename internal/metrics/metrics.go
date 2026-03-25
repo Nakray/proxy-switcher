@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
+	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
@@ -255,17 +257,77 @@ func (c *Collector) IncBotCommand(command string) {
 func (c *Collector) GetSummary() map[string]interface{} {
 	metrics := make(map[string]interface{})
 
-	// Note: Prometheus Go client doesn't expose Get() method directly
-	// In production, you would use prometheus.Gatherer to collect metrics
-	// For now, we return a basic summary
-	
-	metrics["active_connections"] = "see_prometheus"
-	metrics["total_connections"] = "see_prometheus"
-	metrics["bytes_transferred"] = "see_prometheus"
-	metrics["upstreams"] = "see_prometheus"
-	metrics["note"] = "Query /metrics endpoint for detailed data"
+	// Собираем метрики через Prometheus Gatherer
+	metricFamilies, err := c.registry.Gather()
+	if err != nil {
+		metrics["active_connections"] = "N/A"
+		metrics["total_connections"] = "N/A"
+		metrics["bytes_transferred"] = "N/A"
+		metrics["note"] = "Error gathering metrics: " + err.Error()
+		return metrics
+	}
+
+	// Извлекаем значения
+	metrics["active_connections"] = c.getGaugeValue(metricFamilies, "proxy_active_connections")
+	metrics["total_connections"] = c.getCounterValue(metricFamilies, "proxy_total_connections")
+	metrics["bytes_transferred"] = c.formatBytes(c.getCounterValue(metricFamilies, "proxy_bytes_transferred_total"))
+
+	// Считаем количество upstream'ов
+	upstreamCount := 0
+	for _, mf := range metricFamilies {
+		if *mf.Name == "upstream_health_status" {
+			upstreamCount = len(mf.Metric)
+			break
+		}
+	}
+
+	metrics["note"] = fmt.Sprintf("📈 Tracking %d upstream(s) | Query /metrics for detailed data", upstreamCount)
 
 	return metrics
+}
+
+// getGaugeValue извлекает значение gauge метрики
+func (c *Collector) getGaugeValue(metricFamilies []*dto.MetricFamily, name string) string {
+	for _, mf := range metricFamilies {
+		if *mf.Name == name && len(mf.Metric) > 0 {
+			if mf.Metric[0].Gauge != nil {
+				return fmt.Sprintf("%.0f", *mf.Metric[0].Gauge.Value)
+			}
+		}
+	}
+	return "0"
+}
+
+// getCounterValue извлекает значение counter метрики
+func (c *Collector) getCounterValue(metricFamilies []*dto.MetricFamily, name string) string {
+	for _, mf := range metricFamilies {
+		if *mf.Name == name && len(mf.Metric) > 0 {
+			if mf.Metric[0].Counter != nil {
+				return fmt.Sprintf("%.0f", *mf.Metric[0].Counter.Value)
+			}
+		}
+	}
+	return "0"
+}
+
+// formatBytes форматирует размер в человекочитаемый вид
+func (c *Collector) formatBytes(value string) string {
+	bytes, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return value
+	}
+
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%.0f B", bytes)
+	}
+	div, exp := float64(unit), 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	units := []string{"KB", "MB", "GB", "TB", "PB"}
+	return fmt.Sprintf("%.2f %s", bytes/div, units[exp])
 }
 
 // SafeCollector wraps Collector with mutex for thread-safe operations

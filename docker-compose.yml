@@ -55,12 +55,18 @@ services:
       - '--web.console.templates=/etc/prometheus/consoles'
       - '--storage.tsdb.retention.time=15d'
       - '--web.enable-lifecycle'
+      - '--log.level=warn'
     networks:
       - proxy-network
     depends_on:
       - proxy-switcher
     profiles:
       - monitoring
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
 
   # Optional: Grafana for visualization
   grafana:
@@ -73,6 +79,9 @@ services:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-piechart-panel
+      - GF_LOG_LEVEL=warn
+      - GF_LOG_MODE=console file
+      - GF_LOG_FILTERS=rendering:warn,plugins:warn
     volumes:
       - grafana_data:/var/lib/grafana
       - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
@@ -82,6 +91,11 @@ services:
       - prometheus
     profiles:
       - monitoring
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
 
 networks:
   proxy-network:

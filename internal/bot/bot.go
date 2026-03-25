@@ -394,17 +394,25 @@ func (b *Bot) sendMetrics(chatID int64) {
 	summary := b.metrics.GetSummary()
 
 	var sb strings.Builder
-	sb.WriteString("*Metrics Summary*\n\n")
-
-	sb.WriteString(fmt.Sprintf("Active Connections: %v\n", summary["active_connections"]))
-	sb.WriteString(fmt.Sprintf("Total Connections: %v\n", summary["total_connections"]))
-	sb.WriteString(fmt.Sprintf("Bytes Transferred: %v\n", summary["bytes_transferred"]))
+	sb.WriteString("📊 *Metrics Summary*\n\n")
+	sb.WriteString(fmt.Sprintf("🔹 Active Connections: `%s`\n", summary["active_connections"]))
+	sb.WriteString(fmt.Sprintf("🔹 Total Connections: `%s`\n", summary["total_connections"]))
+	sb.WriteString(fmt.Sprintf("🔹 Bytes Transferred: `%s`\n", summary["bytes_transferred"]))
 	sb.WriteString("\n")
-	sb.WriteString(fmt.Sprintf("_%v_\n", summary["note"]))
+	sb.WriteString(fmt.Sprintf("_%s_\n", escapeMarkdown(summary["note"].(string))))
 
 	msg := tgbotapi.NewMessage(chatID, sb.String())
 	msg.ParseMode = "Markdown"
 	b.sendMessage(msg)
+}
+
+// escapeMarkdown экранирует специальные символы Markdown
+func escapeMarkdown(s string) string {
+	s = strings.ReplaceAll(s, "_", "\\_")
+	s = strings.ReplaceAll(s, "*", "\\*")
+	s = strings.ReplaceAll(s, "`", "\\`")
+	s = strings.ReplaceAll(s, "[", "\\[")
+	return s
 }
 
 func (b *Bot) sendManageMenu(chatID int64) {
