@@ -132,22 +132,24 @@ func main() {
 	var socks5Proxy *proxy.SOCKS5Proxy
 	var mtprotoProxy *proxy.MTProtoProxy
 
-	if cfg.Proxy.SOCKS5Port > 0 {
-		socks5Proxy = proxy.NewSOCKS5Proxy(cfg, healthChecker, metricsCollector, logger)
-		go func() {
-			if err := socks5Proxy.Start(ctx); err != nil {
-				logger.Error("SOCKS5 proxy error", zap.Error(err))
-			}
-		}()
-	}
+	if cfg.Proxy.Enabled {
+		if cfg.Proxy.SOCKS5Port > 0 {
+			socks5Proxy = proxy.NewSOCKS5Proxy(cfg, healthChecker, metricsCollector, logger)
+			go func() {
+				if err := socks5Proxy.Start(ctx); err != nil {
+					logger.Error("SOCKS5 proxy error", zap.Error(err))
+				}
+			}()
+		}
 
-	if cfg.Proxy.MTProtoPort > 0 {
-		mtprotoProxy = proxy.NewMTProtoProxy(cfg, healthChecker, metricsCollector, logger)
-		go func() {
-			if err := mtprotoProxy.Start(ctx); err != nil {
-				logger.Error("MTProto proxy error", zap.Error(err))
-			}
-		}()
+		if cfg.Proxy.MTProtoPort > 0 {
+			mtprotoProxy = proxy.NewMTProtoProxy(cfg, healthChecker, metricsCollector, logger)
+			go func() {
+				if err := mtprotoProxy.Start(ctx); err != nil {
+					logger.Error("MTProto proxy error", zap.Error(err))
+				}
+			}()
+		}
 	}
 
 	logger.Info("Proxy Manager started successfully")
