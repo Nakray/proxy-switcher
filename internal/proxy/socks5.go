@@ -240,7 +240,7 @@ func (p *SOCKS5Proxy) processRequest(conn net.Conn, startTime time.Time) error {
 	}
 	destPort := binary.BigEndian.Uint16(portBuf)
 
-	dest := fmt.Sprintf("%s:%d", destAddr, destPort)
+	dest := net.JoinHostPort(destAddr, fmt.Sprintf("%d", destPort))
 	p.logger.Debug("SOCKS5 request", zap.String("destination", dest))
 
 	// Get best upstream
@@ -265,6 +265,9 @@ func (p *SOCKS5Proxy) processRequest(conn net.Conn, startTime time.Time) error {
 
 	// Send success response
 	p.sendResponse(conn, socks5RespSuccess)
+	p.logger.Info("SOCKS5 connection established",
+		zap.String("destination", dest),
+		zap.String("upstream", upstream.Name))
 
 	// Start bidirectional copy
 	p.relayTraffic(conn, upstreamConn, upstream, startTime)
@@ -433,7 +436,10 @@ func (p *SOCKS5Proxy) relayTraffic(clientConn, upstreamConn net.Conn, upstream *
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		n, _ := io.Copy(upstreamConn, clientConn)
+		n, err := io.Copy(upstreamConn, clientConn)
+		if err != nil {
+			p.logger.Debug("client->upstream copy error", zap.Error(err))
+		}
 		clientConn.SetReadDeadline(time.Now())
 		upstreamConn.SetWriteDeadline(time.Now())
 		bytesTransferred += n
@@ -443,7 +449,10 @@ func (p *SOCKS5Proxy) relayTraffic(clientConn, upstreamConn net.Conn, upstream *
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		n, _ := io.Copy(clientConn, upstreamConn)
+		n, err := io.Copy(clientConn, upstreamConn)
+		if err != nil {
+			p.logger.Debug("upstream->client copy error", zap.Error(err))
+		}
 		clientConn.SetWriteDeadline(time.Now())
 		upstreamConn.SetReadDeadline(time.Now())
 		bytesTransferred += n
