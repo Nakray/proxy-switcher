@@ -22,7 +22,7 @@ import (
 
 func main() {
 	// Parse command line flags
-	configPath := flag.String("config", "", "Path to configuration file (YAML)")
+	configPath := flag.String("config", "configs/config.yaml", "Path to configuration file (YAML)")
 	dbPath := flag.String("db", "data/proxy-switcher.db", "Path to SQLite database")
 	flag.Parse()
 
@@ -130,7 +130,6 @@ func main() {
 
 	// Initialize and start proxies
 	var socks5Proxy *proxy.SOCKS5Proxy
-	var mtprotoProxy *proxy.MTProtoProxy
 
 	if cfg.Proxy.Enabled {
 		if cfg.Proxy.SOCKS5Port > 0 {
@@ -138,15 +137,6 @@ func main() {
 			go func() {
 				if err := socks5Proxy.Start(ctx); err != nil {
 					logger.Error("SOCKS5 proxy error", zap.Error(err))
-				}
-			}()
-		}
-
-		if cfg.Proxy.MTProtoPort > 0 {
-			mtprotoProxy = proxy.NewMTProtoProxy(cfg, healthChecker, metricsCollector, logger)
-			go func() {
-				if err := mtprotoProxy.Start(ctx); err != nil {
-					logger.Error("MTProto proxy error", zap.Error(err))
 				}
 			}()
 		}
@@ -169,9 +159,6 @@ func main() {
 	// Stop accepting new connections
 	if socks5Proxy != nil {
 		socks5Proxy.Stop()
-	}
-	if mtprotoProxy != nil {
-		mtprotoProxy.Stop()
 	}
 
 	// Stop health checker

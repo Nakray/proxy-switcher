@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	dto "github.com/prometheus/client_model/go"
 	"go.uber.org/zap"
 )
 
@@ -19,17 +19,17 @@ type Collector struct {
 	registry *prometheus.Registry
 
 	// Connection metrics
-	activeConnections   prometheus.Gauge
-	totalConnections    prometheus.Counter
-	connectionDuration  prometheus.Histogram
-	bytesTransferred    prometheus.Counter
+	activeConnections  prometheus.Gauge
+	totalConnections   prometheus.Counter
+	connectionDuration prometheus.Histogram
+	bytesTransferred   prometheus.Counter
 
 	// Upstream metrics
-	upstreamLatency      *prometheus.GaugeVec
-	upstreamHealth       *prometheus.GaugeVec
-	upstreamRequests     *prometheus.CounterVec
-	upstreamFailures     *prometheus.CounterVec
-	upstreamReconnects   *prometheus.CounterVec
+	upstreamLatency    *prometheus.GaugeVec
+	upstreamHealth     *prometheus.GaugeVec
+	upstreamRequests   *prometheus.CounterVec
+	upstreamFailures   *prometheus.CounterVec
+	upstreamReconnects *prometheus.CounterVec
 
 	// Health check metrics
 	healthCheckDuration prometheus.Histogram
@@ -78,27 +78,27 @@ func NewCollector(logger *zap.Logger, upstreamNames []string) *Collector {
 	c.upstreamLatency = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "upstream_latency_milliseconds",
 		Help: "Latency to upstream proxies in milliseconds",
-	}, []string{"upstream", "type"})
+	}, []string{"upstream"})
 
 	c.upstreamHealth = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "upstream_health_status",
 		Help: "Health status of upstream proxies (1=healthy, 0=unhealthy)",
-	}, []string{"upstream", "type"})
+	}, []string{"upstream"})
 
 	c.upstreamRequests = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "upstream_requests_total",
 		Help: "Total requests forwarded to upstream",
-	}, []string{"upstream", "type"})
+	}, []string{"upstream"})
 
 	c.upstreamFailures = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "upstream_failures_total",
 		Help: "Total upstream connection failures",
-	}, []string{"upstream", "type"})
+	}, []string{"upstream"})
 
 	c.upstreamReconnects = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "upstream_reconnects_total",
 		Help: "Total upstream reconnection attempts",
-	}, []string{"upstream", "type"})
+	}, []string{"upstream"})
 
 	// Initialize health check metrics
 	c.healthCheckDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
@@ -142,8 +142,7 @@ func NewCollector(logger *zap.Logger, upstreamNames []string) *Collector {
 
 	// Initialize upstream health status to 0 (unknown)
 	for _, name := range upstreamNames {
-		c.upstreamHealth.WithLabelValues(name, "socks5").Set(-1)
-		c.upstreamHealth.WithLabelValues(name, "mtproto").Set(-1)
+		c.upstreamHealth.WithLabelValues(name).Set(-1)
 	}
 
 	return c
@@ -211,28 +210,28 @@ func (c *Collector) AddBytesTransferred(bytes int64) {
 }
 
 // Upstream metrics
-func (c *Collector) SetUpstreamLatency(name, upstreamType string, latency time.Duration) {
-	c.upstreamLatency.WithLabelValues(name, upstreamType).Set(float64(latency.Milliseconds()))
+func (c *Collector) SetUpstreamLatency(name string, latency time.Duration) {
+	c.upstreamLatency.WithLabelValues(name).Set(float64(latency.Milliseconds()))
 }
 
-func (c *Collector) SetUpstreamHealth(name, upstreamType string, healthy bool) {
+func (c *Collector) SetUpstreamHealth(name string, healthy bool) {
 	value := 0.0
 	if healthy {
 		value = 1.0
 	}
-	c.upstreamHealth.WithLabelValues(name, upstreamType).Set(value)
+	c.upstreamHealth.WithLabelValues(name).Set(value)
 }
 
-func (c *Collector) IncUpstreamRequests(name, upstreamType string) {
-	c.upstreamRequests.WithLabelValues(name, upstreamType).Inc()
+func (c *Collector) IncUpstreamRequests(name string) {
+	c.upstreamRequests.WithLabelValues(name).Inc()
 }
 
-func (c *Collector) IncUpstreamFailures(name, upstreamType string) {
-	c.upstreamFailures.WithLabelValues(name, upstreamType).Inc()
+func (c *Collector) IncUpstreamFailures(name string) {
+	c.upstreamFailures.WithLabelValues(name).Inc()
 }
 
-func (c *Collector) IncUpstreamReconnects(name, upstreamType string) {
-	c.upstreamReconnects.WithLabelValues(name, upstreamType).Inc()
+func (c *Collector) IncUpstreamReconnects(name string) {
+	c.upstreamReconnects.WithLabelValues(name).Inc()
 }
 
 // Health check metrics
@@ -332,7 +331,7 @@ func (c *Collector) formatBytes(value string) string {
 
 // SafeCollector wraps Collector with mutex for thread-safe operations
 type SafeCollector struct {
-	mu       sync.RWMutex
+	mu        sync.RWMutex
 	collector *Collector
 }
 
@@ -377,34 +376,34 @@ func (s *SafeCollector) AddBytesTransferred(bytes int64) {
 	s.collector.AddBytesTransferred(bytes)
 }
 
-func (s *SafeCollector) SetUpstreamLatency(name, upstreamType string, latency time.Duration) {
+func (s *SafeCollector) SetUpstreamLatency(name string, latency time.Duration) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.collector.SetUpstreamLatency(name, upstreamType, latency)
+	s.collector.SetUpstreamLatency(name, latency)
 }
 
-func (s *SafeCollector) SetUpstreamHealth(name, upstreamType string, healthy bool) {
+func (s *SafeCollector) SetUpstreamHealth(name string, healthy bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.collector.SetUpstreamHealth(name, upstreamType, healthy)
+	s.collector.SetUpstreamHealth(name, healthy)
 }
 
-func (s *SafeCollector) IncUpstreamRequests(name, upstreamType string) {
+func (s *SafeCollector) IncUpstreamRequests(name string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.collector.IncUpstreamRequests(name, upstreamType)
+	s.collector.IncUpstreamRequests(name)
 }
 
-func (s *SafeCollector) IncUpstreamFailures(name, upstreamType string) {
+func (s *SafeCollector) IncUpstreamFailures(name string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.collector.IncUpstreamFailures(name, upstreamType)
+	s.collector.IncUpstreamFailures(name)
 }
 
-func (s *SafeCollector) IncUpstreamReconnects(name, upstreamType string) {
+func (s *SafeCollector) IncUpstreamReconnects(name string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.collector.IncUpstreamReconnects(name, upstreamType)
+	s.collector.IncUpstreamReconnects(name)
 }
 
 func (s *SafeCollector) ObserveHealthCheckDuration(duration time.Duration) {

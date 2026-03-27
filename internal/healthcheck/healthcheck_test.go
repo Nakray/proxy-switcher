@@ -104,7 +104,7 @@ func TestGetBestUpstream(t *testing.T) {
 		t.Fatalf("LoadUpstreams() error = %v", err)
 	}
 
-	best := checker.GetBestUpstream(config.UpstreamTypeSOCKS5)
+	best := checker.GetBestUpstream()
 	if best != nil {
 		t.Errorf("Expected nil best upstream initially, got %v", best)
 	}
@@ -208,46 +208,10 @@ func TestProbeSOCKS5(t *testing.T) {
 
 	upstream := config.Upstream{
 		Name: "test1",
-		Type: config.UpstreamTypeSOCKS5,
 		Host: "localhost",
 		Port: 1080,
 	}
 	healthy, latency := checker.probeSOCKS5(context.Background(), upstream)
-	if healthy {
-		t.Error("Expected probe to fail for non-existent server")
-	}
-	if latency != 0 {
-		t.Errorf("Expected 0 latency on failure, got %v", latency)
-	}
-}
-
-func TestProbeMTProto(t *testing.T) {
-	db, repo := setupTestDB(t)
-	defer db.Close()
-
-	cfg := &config.Config{
-		Upstreams: []config.Upstream{},
-		HealthCheck: config.HealthCheckConfig{
-			Interval: 10 * time.Second,
-			Timeout:  100 * time.Millisecond,
-		},
-	}
-
-	logger, _ := zap.NewDevelopment()
-	metricsCollector := metrics.NewSafeCollector(logger, []string{})
-	checker := NewChecker(cfg, repo, metricsCollector, logger)
-
-	if err := checker.LoadUpstreams(); err != nil {
-		t.Fatalf("LoadUpstreams() error = %v", err)
-	}
-
-	upstream := config.Upstream{
-		Name: "test1",
-		Type: config.UpstreamTypeMTProto,
-		Host: "localhost",
-		Port: 2080,
-	}
-	healthy, latency := checker.probeMTProto(context.Background(), upstream)
 	if healthy {
 		t.Error("Expected probe to fail for non-existent server")
 	}
@@ -278,7 +242,6 @@ func TestAddUpstream(t *testing.T) {
 
 	upstream := config.Upstream{
 		Name:    "new-upstream",
-		Type:    config.UpstreamTypeSOCKS5,
 		Host:    "localhost",
 		Port:    1080,
 		Enabled: true,
@@ -306,7 +269,6 @@ func TestRemoveUpstream(t *testing.T) {
 
 	upstream := config.Upstream{
 		Name:    "test1",
-		Type:    config.UpstreamTypeSOCKS5,
 		Host:    "localhost",
 		Port:    1080,
 		Enabled: true,
@@ -353,7 +315,6 @@ func TestEnableDisableUpstream(t *testing.T) {
 
 	upstream := config.Upstream{
 		Name:    "test1",
-		Type:    config.UpstreamTypeSOCKS5,
 		Host:    "localhost",
 		Port:    1080,
 		Enabled: true,
@@ -411,14 +372,12 @@ func TestGetBestUpstreamWithDisabled(t *testing.T) {
 	upstreams := []config.Upstream{
 		{
 			Name:    "test1",
-			Type:    config.UpstreamTypeSOCKS5,
 			Host:    "localhost",
 			Port:    1080,
 			Enabled: true,
 		},
 		{
 			Name:    "test2",
-			Type:    config.UpstreamTypeSOCKS5,
 			Host:    "localhost",
 			Port:    1081,
 			Enabled: false,
@@ -458,7 +417,7 @@ func TestGetBestUpstreamWithDisabled(t *testing.T) {
 	}
 	checker.mu.Unlock()
 
-	best := checker.GetBestUpstream(config.UpstreamTypeSOCKS5)
+	best := checker.GetBestUpstream()
 	if best == nil {
 		t.Fatal("GetBestUpstream() returned nil")
 	}

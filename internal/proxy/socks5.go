@@ -244,20 +244,20 @@ func (p *SOCKS5Proxy) processRequest(conn net.Conn, startTime time.Time) error {
 	p.logger.Debug("SOCKS5 request", zap.String("destination", dest))
 
 	// Get best upstream
-	upstream := p.healthCheck.GetBestUpstream(config.UpstreamTypeSOCKS5)
+	upstream := p.healthCheck.GetBestUpstream()
 	if upstream == nil {
 		p.logger.Warn("No healthy upstream available")
 		p.sendResponse(conn, 0x06) // Host unreachable
 		return fmt.Errorf("no healthy upstream")
 	}
 
-	p.metrics.IncUpstreamRequests(upstream.Name, string(upstream.Type))
+	p.metrics.IncUpstreamRequests(upstream.Name)
 
 	// Connect to upstream
 	upstreamConn, err := p.connectToUpstream(upstream, dest)
 	if err != nil {
 		p.logger.Debug("Failed to connect to upstream", zap.Error(err))
-		p.metrics.IncUpstreamFailures(upstream.Name, string(upstream.Type))
+		p.metrics.IncUpstreamFailures(upstream.Name)
 		p.sendResponse(conn, 0x05) // Connection refused
 		return fmt.Errorf("failed to connect to upstream: %w", err)
 	}

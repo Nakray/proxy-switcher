@@ -25,10 +25,10 @@ type UpstreamStatus struct {
 
 // Checker performs health checks on upstream proxies
 type Checker struct {
-	config     *config.Config
-	db         *database.UpstreamRepository
-	metrics    *metrics.SafeCollector
-	logger     *zap.Logger
+	config  *config.Config
+	db      *database.UpstreamRepository
+	metrics *metrics.SafeCollector
+	logger  *zap.Logger
 
 	mu       sync.RWMutex
 	statuses map[string]*UpstreamStatus
@@ -163,7 +163,6 @@ func (h *Checker) checkUpstream(upstream config.Upstream) {
 		if !status.Healthy {
 			h.logger.Info("Upstream recovered",
 				zap.String("name", upstream.Name),
-				zap.String("type", string(upstream.Type)),
 				zap.Duration("latency", latency))
 		}
 		status.Healthy = true
@@ -172,7 +171,6 @@ func (h *Checker) checkUpstream(upstream config.Upstream) {
 		if status.Healthy {
 			h.logger.Warn("Upstream failed health check",
 				zap.String("name", upstream.Name),
-				zap.String("type", string(upstream.Type)),
 				zap.Int("consecutive_failures", status.Consecutive))
 		}
 		status.Healthy = status.Consecutive < h.config.HealthCheck.UnhealthyThreshold
@@ -180,9 +178,9 @@ func (h *Checker) checkUpstream(upstream config.Upstream) {
 	h.mu.Unlock()
 
 	// Update metrics
-	h.metrics.SetUpstreamHealth(upstream.Name, string(upstream.Type), status.Healthy)
+	h.metrics.SetUpstreamHealth(upstream.Name, status.Healthy)
 	if healthy && latency > 0 {
-		h.metrics.SetUpstreamLatency(upstream.Name, string(upstream.Type), latency)
+		h.metrics.SetUpstreamLatency(upstream.Name, latency)
 	}
 	h.metrics.ObserveHealthCheckDuration(duration)
 }
@@ -191,17 +189,7 @@ func (h *Checker) probeUpstream(upstream config.Upstream) (bool, time.Duration) 
 	ctx, cancel := context.WithTimeout(h.ctx, h.config.HealthCheck.Timeout)
 	defer cancel()
 
-	switch upstream.Type {
-	case config.UpstreamTypeSOCKS5:
-		return h.probeSOCKS5(ctx, upstream)
-	case config.UpstreamTypeMTProto:
-		return h.probeMTProto(ctx, upstream)
-	default:
-		h.logger.Error("Unknown upstream type",
-			zap.String("name", upstream.Name),
-			zap.String("type", string(upstream.Type)))
-		return false, 0
-	}
+	return h.probeSOCKS5(ctx, upstream)
 }
 
 func (h *Checker) probeSOCKS5(ctx context.Context, upstream config.Upstream) (bool, time.Duration) {
@@ -235,30 +223,8 @@ func (h *Checker) probeSOCKS5(ctx context.Context, upstream config.Upstream) (bo
 	return true, latency
 }
 
-func (h *Checker) probeMTProto(ctx context.Context, upstream config.Upstream) (bool, time.Duration) {
-	startTime := time.Now()
-	addr := fmt.Sprintf("%s:%d", upstream.Host, upstream.Port)
-
-	dialer := &net.Dialer{Timeout: h.config.HealthCheck.Timeout}
-	conn, err := dialer.DialContext(ctx, "tcp", addr)
-	if err != nil {
-		h.logger.Debug("MTProto probe failed",
-			zap.String("upstream", upstream.Name),
-			zap.Error(err))
-		return false, 0
-	}
-	defer conn.Close()
-
-	// MTProto basic connectivity check
-	// We just verify TCP connection is possible
-	// Full MTProto handshake would require the secret
-	latency := time.Since(startTime)
-
-	return true, latency
-}
-
 func (h *Checker) upstreamKey(upstream config.Upstream) string {
-	return fmt.Sprintf("%s_%s", upstream.Name, upstream.Type)
+	return fmt.Sprintf("%s", upstream.Name)
 }
 
 // GetHealthyUpstreams returns a list of healthy upstreams
@@ -276,7 +242,7 @@ func (h *Checker) GetHealthyUpstreams() []config.Upstream {
 }
 
 // GetBestUpstream returns the healthy upstream with lowest latency
-func (h *Checker) GetBestUpstream(upstreamType config.UpstreamType) *config.Upstream {
+func (h *Checker) GetBestUpstream() *config.Upstream {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
@@ -286,9 +252,6 @@ func (h *Checker) GetBestUpstream(upstreamType config.UpstreamType) *config.Upst
 			continue
 		}
 		if !status.Upstream.Enabled {
-			continue
-		}
-		if upstreamType != "" && status.Upstream.Type != upstreamType {
 			continue
 		}
 		if best == nil || status.Latency < best.Latency {
@@ -377,11 +340,10 @@ func (h *Checker) AddUpstream(upstream config.Upstream) error {
 	}
 
 	// Update metrics
-	h.metrics.SetUpstreamHealth(upstream.Name, string(upstream.Type), false)
+	h.metrics.SetUpstreamHealth(upstream.Name, false)
 
 	h.logger.Info("Upstream added",
 		zap.String("name", upstream.Name),
-		zap.String("type", string(upstream.Type)),
 		zap.String("host", upstream.Host),
 		zap.Int("port", upstream.Port))
 
@@ -398,7 +360,6 @@ func (h *Checker) RemoveUpstream(name string) error {
 	for key, status := range h.statuses {
 		if status.Upstream.Name == name {
 			found = true
-			upstreamType = string(status.Upstream.Type)
 			delete(h.statuses, key)
 			break
 		}

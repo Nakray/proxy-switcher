@@ -40,7 +40,6 @@ type Bot struct {
 // addStep represents the current step in adding an upstream
 type addStep struct {
 	name     string
-	typ      config.UpstreamType
 	host     string
 	port     int
 	username string
@@ -306,8 +305,6 @@ func (b *Bot) sendHelp(chatID int64) {
 /enable <name> - Enable upstream
 /disable <name> - Disable upstream
 
-*Types:* socks5, mtproto
-
 /help - Show this help message
 
 *Alerts:*
@@ -365,7 +362,7 @@ func (b *Bot) sendUpstreams(chatID int64) {
 			enabledStr = "✗"
 		}
 
-		sb.WriteString(fmt.Sprintf("%s *%s* (%s)\n", emoji, status.Upstream.Name, status.Upstream.Type))
+		sb.WriteString(fmt.Sprintf("%s *%s*\n", emoji, status.Upstream.Name))
 		sb.WriteString(fmt.Sprintf("  Host: %s:%d\n", status.Upstream.Host, status.Upstream.Port))
 		sb.WriteString(fmt.Sprintf("  Latency: %s | Enabled: %s\n", latencyStr, enabledStr))
 		sb.WriteString(fmt.Sprintf("  Last Check: %s\n", status.LastCheck.Format(time.RFC822)))
@@ -457,27 +454,20 @@ func (b *Bot) handleAdd(msg *tgbotapi.Message) {
 	args := strings.Fields(msg.Text)
 	if len(args) < 5 {
 		b.sendMessage(tgbotapi.NewMessage(msg.Chat.ID,
-			"Usage: /add <name> <type> <host> <port> [username] [password]\n\nExample:\n/add myproxy socks5 proxy.com 1080 user pass"))
+			"Usage: /add <name> <host> <port> [username] [password]\n\nExample:\n/add myproxy proxy.com 1080 user pass"))
 		return
 	}
 
 	name := args[1]
-	proxyType := config.UpstreamType(args[2])
-	host := args[3]
-	port, err := strconv.Atoi(args[4])
+	host := args[2]
+	port, err := strconv.Atoi(args[3])
 	if err != nil {
 		b.sendMessage(tgbotapi.NewMessage(msg.Chat.ID, "Invalid port number"))
 		return
 	}
 
-	if proxyType != config.UpstreamTypeSOCKS5 && proxyType != config.UpstreamTypeMTProto {
-		b.sendMessage(tgbotapi.NewMessage(msg.Chat.ID, "Invalid type. Use 'socks5' or 'mtproto'"))
-		return
-	}
-
 	upstream := config.Upstream{
 		Name:    name,
-		Type:    proxyType,
 		Host:    host,
 		Port:    port,
 		Enabled: true,
@@ -725,15 +715,15 @@ func (b *Bot) SendUpstreamRecoveredAlert(upstreamName, upstreamType string) {
 
 func (b *Bot) startAddUpstreamFlow(callback *tgbotapi.CallbackQuery) {
 	b.answerCallback(callback, "")
-	
+
 	b.mu.Lock()
 	b.addSteps[callback.Message.Chat.ID] = &addStep{}
 	b.mu.Unlock()
 
-	msg := tgbotapi.NewMessage(callback.Message.Chat.ID, 
+	msg := tgbotapi.NewMessage(callback.Message.Chat.ID,
 		"➕ *Adding New Upstream*\n\n"+
-		"Let's configure your upstream step by step.\n\n"+
-		"Step 1/6: Enter the upstream *name* (e.g., `my-proxy-1`):")
+			"Let's configure your upstream step by step.\n\n"+
+			"Step 1/5: Enter the upstream *name* (e.g., `my-proxy-1`):")
 	msg.ParseMode = "Markdown"
 	b.sendMessage(msg)
 }
@@ -752,30 +742,14 @@ func (b *Bot) handleAddStepInput(msg *tgbotapi.Message) {
 	if step.name == "" {
 		step.name = text
 		b.sendMessage(tgbotapi.NewMessage(msg.Chat.ID,
-			"Step 2/6: Enter the upstream *type*:\n"+
-			"- `socks5` - SOCKS5 proxy\n"+
-			"- `mtproto` - MTProto proxy\n\n"+
-			"Send: `socks5` or `mtproto`"))
-		return
-	}
-
-	if step.typ == "" {
-		typ := config.UpstreamType(strings.ToLower(text))
-		if typ != config.UpstreamTypeSOCKS5 && typ != config.UpstreamTypeMTProto {
-			b.sendMessage(tgbotapi.NewMessage(msg.Chat.ID,
-				"❌ Invalid type. Please send `socks5` or `mtproto`"))
-			return
-		}
-		step.typ = typ
-		b.sendMessage(tgbotapi.NewMessage(msg.Chat.ID,
-			"Step 3/6: Enter the upstream *host* (e.g., `proxy.example.com` or `192.168.1.1`):"))
+			"Step 2/5: Enter the upstream *host* (e.g., `proxy.example.com` or `192.168.1.1`):"))
 		return
 	}
 
 	if step.host == "" {
 		step.host = text
 		b.sendMessage(tgbotapi.NewMessage(msg.Chat.ID,
-			"Step 4/6: Enter the upstream *port* (e.g., `1080`):"))
+			"Step 3/5: Enter the upstream *port* (e.g., `1080`):"))
 		return
 	}
 
@@ -788,7 +762,7 @@ func (b *Bot) handleAddStepInput(msg *tgbotapi.Message) {
 		}
 		step.port = port
 		b.sendMessage(tgbotapi.NewMessage(msg.Chat.ID,
-			"Step 5/6: Enter *username* (optional, send `-` to skip):"))
+			"Step 4/5: Enter *username* (optional, send `-` to skip):"))
 		return
 	}
 
@@ -797,7 +771,7 @@ func (b *Bot) handleAddStepInput(msg *tgbotapi.Message) {
 			step.username = text
 		}
 		b.sendMessage(tgbotapi.NewMessage(msg.Chat.ID,
-			"Step 6/6: Enter *password* (optional, send `-` to skip):"))
+			"Step 5/5: Enter *password* (optional, send `-` to skip):"))
 		return
 	}
 
@@ -809,7 +783,6 @@ func (b *Bot) handleAddStepInput(msg *tgbotapi.Message) {
 		// Create upstream
 		upstream := config.Upstream{
 			Name:     step.name,
-			Type:     step.typ,
 			Host:     step.host,
 			Port:     step.port,
 			Username: step.username,
@@ -832,8 +805,7 @@ func (b *Bot) handleAddStepInput(msg *tgbotapi.Message) {
 		}
 
 		b.sendMessage(tgbotapi.NewMessage(msg.Chat.ID,
-			fmt.Sprintf("✅ Upstream *%s* added successfully!\n\nHost: %s:%d\nType: %s%s",
-				step.name, step.host, step.port, step.typ, authStr)))
+			fmt.Sprintf("✅ Upstream *%s* added successfully!\n\nHost: %s:%d\n%s", step.name, step.host, step.port, authStr)))
 
 		// Cleanup
 		b.mu.Lock()
@@ -855,7 +827,7 @@ func createHTTPClientWithProxyAndHost(hc *healthcheck.Checker, excludeHost strin
 	// Find best SOCKS5 upstream that's not excluded
 	var upstream *config.Upstream
 	for _, u := range healthy {
-		if u.Type == config.UpstreamTypeSOCKS5 && u.Host != excludeHost {
+		if u.Host != excludeHost {
 			upstream = &u
 			break
 		}
@@ -864,10 +836,8 @@ func createHTTPClientWithProxyAndHost(hc *healthcheck.Checker, excludeHost strin
 	// If all SOCKS5 are excluded, use the best one anyway
 	if upstream == nil {
 		for _, u := range healthy {
-			if u.Type == config.UpstreamTypeSOCKS5 {
-				upstream = &u
-				break
-			}
+			upstream = &u
+			break
 		}
 	}
 

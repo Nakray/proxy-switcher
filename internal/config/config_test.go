@@ -13,9 +13,6 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Proxy.SOCKS5Port != 1080 {
 		t.Errorf("Expected SOCKS5Port 1080, got %d", cfg.Proxy.SOCKS5Port)
 	}
-	if cfg.Proxy.MTProtoPort != 2080 {
-		t.Errorf("Expected MTProtoPort 2080, got %d", cfg.Proxy.MTProtoPort)
-	}
 	if cfg.HealthCheck.Interval != 10*time.Second {
 		t.Errorf("Expected HealthCheck.Interval 10s, got %v", cfg.HealthCheck.Interval)
 	}
@@ -40,7 +37,6 @@ func TestConfigValidate(t *testing.T) {
 				Upstreams: []Upstream{
 					{
 						Name: "test-upstream",
-						Type: UpstreamTypeSOCKS5,
 						Host: "localhost",
 						Port: 1081,
 					},
@@ -89,7 +85,6 @@ func TestLoadFromFile(t *testing.T) {
 	configContent := `
 proxy:
   socks5_port: 1080
-  mtproto_port: 2080
   enabled: true
 
 upstreams:
@@ -132,9 +127,6 @@ log_level: "debug"
 	if cfg.Proxy.SOCKS5Port != 1080 {
 		t.Errorf("Expected SOCKS5Port 1080, got %d", cfg.Proxy.SOCKS5Port)
 	}
-	if cfg.Proxy.MTProtoPort != 2080 {
-		t.Errorf("Expected MTProtoPort 2080, got %d", cfg.Proxy.MTProtoPort)
-	}
 	if len(cfg.Upstreams) != 1 {
 		t.Errorf("Expected 1 upstream, got %d", len(cfg.Upstreams))
 	}
@@ -143,28 +135,6 @@ log_level: "debug"
 	}
 	if cfg.HealthCheck.Interval != 15*time.Second {
 		t.Errorf("Expected HealthCheck.Interval 15s, got %v", cfg.HealthCheck.Interval)
-	}
-}
-
-func TestLoadFromEnv(t *testing.T) {
-	t.Setenv("PROXY_SOCKS5_PORT", "2000")
-	t.Setenv("PROXY_MTProto_PORT", "3000")
-	t.Setenv("HEALTH_CHECK_INTERVAL", "20s")
-	t.Setenv("METRICS_PORT", "8080")
-
-	cfg := LoadFromEnv()
-
-	if cfg.Proxy.SOCKS5Port != 2000 {
-		t.Errorf("Expected SOCKS5Port 2000 from env, got %d", cfg.Proxy.SOCKS5Port)
-	}
-	if cfg.Proxy.MTProtoPort != 3000 {
-		t.Errorf("Expected MTProtoPort 3000 from env, got %d", cfg.Proxy.MTProtoPort)
-	}
-	if cfg.HealthCheck.Interval != 20*time.Second {
-		t.Errorf("Expected HealthCheck.Interval 20s from env, got %v", cfg.HealthCheck.Interval)
-	}
-	if cfg.Metrics.Port != 8080 {
-		t.Errorf("Expected Metrics.Port 8080 from env, got %d", cfg.Metrics.Port)
 	}
 }
 
@@ -177,11 +147,9 @@ func TestConfigString(t *testing.T) {
 		Upstreams: []Upstream{
 			{
 				Name:     "test",
-				Type:     UpstreamTypeSOCKS5,
 				Host:     "localhost",
 				Port:     1081,
 				Password: "mysecretpassword",
-				Secret:   "mtproto-super-secret",
 			},
 		},
 		Bot: BotConfig{

@@ -56,18 +56,15 @@ func (d *Database) migrate() error {
 	CREATE TABLE IF NOT EXISTS upstreams (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		name TEXT UNIQUE NOT NULL,
-		type TEXT NOT NULL CHECK(type IN ('socks5', 'mtproto')),
 		host TEXT NOT NULL,
 		port INTEGER NOT NULL CHECK(port > 0 AND port <= 65535),
 		username TEXT,
 		password TEXT,
-		secret TEXT,
 		enabled BOOLEAN NOT NULL DEFAULT 1,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
 
-	CREATE INDEX IF NOT EXISTS idx_upstreams_type ON upstreams(type);
 	CREATE INDEX IF NOT EXISTS idx_upstreams_enabled ON upstreams(enabled);
 	CREATE INDEX IF NOT EXISTS idx_upstreams_name ON upstreams(name);
 
@@ -113,7 +110,7 @@ func (r *UpstreamRepository) List() ([]config.Upstream, error) {
 	defer r.db.mu.RUnlock()
 
 	query := `
-		SELECT id, name, type, host, port, username, password, secret, enabled
+		SELECT id, name, host, port, username, password, enabled
 		FROM upstreams
 		ORDER BY name
 	`
@@ -128,10 +125,10 @@ func (r *UpstreamRepository) List() ([]config.Upstream, error) {
 	for rows.Next() {
 		var u config.Upstream
 		var id int
-		var username, password, secret sql.NullString
+		var username, password sql.NullString
 		var enabled bool
 
-		if err := rows.Scan(&id, &u.Name, &u.Type, &u.Host, &u.Port, &username, &password, &secret, &enabled); err != nil {
+		if err := rows.Scan(&id, &u.Name, &u.Host, &u.Port, &username, &password, &enabled); err != nil {
 			return nil, err
 		}
 
@@ -141,9 +138,6 @@ func (r *UpstreamRepository) List() ([]config.Upstream, error) {
 		}
 		if password.Valid {
 			u.Password = password.String
-		}
-		if secret.Valid {
-			u.Secret = secret.String
 		}
 
 		upstreams = append(upstreams, u)
@@ -166,17 +160,17 @@ func (r *UpstreamRepository) Get(name string) (*config.Upstream, error) {
 	defer r.db.mu.RUnlock()
 
 	query := `
-		SELECT id, name, type, host, port, username, password, secret, enabled
+		SELECT id, name, host, port, username, password, enabled
 		FROM upstreams
 		WHERE name = ?
 	`
 
 	var u config.Upstream
 	var id int
-	var username, password, secret sql.NullString
+	var username, password sql.NullString
 	var enabled bool
 
-	err := r.db.db.QueryRow(query, name).Scan(&id, &u.Name, &u.Type, &u.Host, &u.Port, &username, &password, &secret, &enabled)
+	err := r.db.db.QueryRow(query, name).Scan(&id, &u.Name, &u.Host, &u.Port, &username, &password, &enabled)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -191,9 +185,6 @@ func (r *UpstreamRepository) Get(name string) (*config.Upstream, error) {
 	if password.Valid {
 		u.Password = password.String
 	}
-	if secret.Valid {
-		u.Secret = secret.String
-	}
 
 	return &u, nil
 }
@@ -204,18 +195,16 @@ func (r *UpstreamRepository) Create(upstream config.Upstream) error {
 	defer r.db.mu.Unlock()
 
 	query := `
-		INSERT INTO upstreams (name, type, host, port, username, password, secret, enabled)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO upstreams (name, host, port, username, password, enabled)
+		VALUES (?, ?, ?, ?, ?, ?)
 	`
 
 	_, err := r.db.db.Exec(query,
 		upstream.Name,
-		upstream.Type,
 		upstream.Host,
 		upstream.Port,
 		nullString(upstream.Username),
 		nullString(upstream.Password),
-		nullString(upstream.Secret),
 		upstream.Enabled,
 	)
 
@@ -234,17 +223,15 @@ func (r *UpstreamRepository) Update(upstream config.Upstream) error {
 
 	query := `
 		UPDATE upstreams
-		SET type = ?, host = ?, port = ?, username = ?, password = ?, secret = ?, enabled = ?
+		SET host = ?, port = ?, username = ?, password = ?, enabled = ?
 		WHERE name = ?
 	`
 
 	result, err := r.db.db.Exec(query,
-		upstream.Type,
 		upstream.Host,
 		upstream.Port,
 		nullString(upstream.Username),
 		nullString(upstream.Password),
-		nullString(upstream.Secret),
 		upstream.Enabled,
 		upstream.Name,
 	)
@@ -327,8 +314,8 @@ func (r *UpstreamRepository) Seed(upstreams []config.Upstream) error {
 	defer tx.Rollback()
 
 	stmt, err := tx.Prepare(`
-		INSERT OR IGNORE INTO upstreams (name, type, host, port, username, password, secret, enabled)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT OR IGNORE INTO upstreams (name, host, port, username, password, enabled)
+		VALUES (?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return err
@@ -336,8 +323,7 @@ func (r *UpstreamRepository) Seed(upstreams []config.Upstream) error {
 	defer stmt.Close()
 
 	for _, u := range upstreams {
-		_, err := stmt.Exec(u.Name, u.Type, u.Host, u.Port,
-			nullString(u.Username), nullString(u.Password), nullString(u.Secret), u.Enabled)
+		_, err := stmt.Exec(u.Name, u.Host, u.Port, nullString(u.Username), nullString(u.Password), u.Enabled)
 		if err != nil {
 			return err
 		}
