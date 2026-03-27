@@ -58,20 +58,21 @@ type MetricsConfig struct {
 
 // ProxyConfig holds the main proxy listener configuration
 type ProxyConfig struct {
-	SOCKS5Port  int  `yaml:"socks5_port" json:"socks5_port"`
-	MTProtoPort int  `yaml:"mtproto_port" json:"mtproto_port"`
-	Enabled     bool `yaml:"enabled" json:"enabled"`
+	SOCKS5Port  int    `yaml:"socks5_port" json:"socks5_port"`
+	Username    string `yaml:"username" json:"username"`
+	Password    string `yaml:"password" json:"password"`
+	MTProtoPort int    `yaml:"mtproto_port" json:"mtproto_port"`
 }
 
 // Config holds the entire application configuration
 type Config struct {
-	Proxy           ProxyConfig       `yaml:"proxy" json:"proxy"`
-	Upstreams       []Upstream        `yaml:"upstreams" json:"upstreams"`
-	BootstrapUpstream *Upstream       `yaml:"bootstrap_upstream,omitempty" json:"bootstrap_upstream,omitempty"`
-	HealthCheck     HealthCheckConfig `yaml:"health_check" json:"health_check"`
-	Bot             BotConfig         `yaml:"bot" json:"bot"`
-	Metrics         MetricsConfig     `yaml:"metrics" json:"metrics"`
-	LogLevel        string            `yaml:"log_level" json:"log_level"`
+	Proxy             ProxyConfig       `yaml:"proxy" json:"proxy"`
+	Upstreams         []Upstream        `yaml:"upstreams" json:"upstreams"`
+	BootstrapUpstream *Upstream         `yaml:"bootstrap_upstream,omitempty" json:"bootstrap_upstream,omitempty"`
+	HealthCheck       HealthCheckConfig `yaml:"health_check" json:"health_check"`
+	Bot               BotConfig         `yaml:"bot" json:"bot"`
+	Metrics           MetricsConfig     `yaml:"metrics" json:"metrics"`
+	LogLevel          string            `yaml:"log_level" json:"log_level"`
 }
 
 // DefaultConfig returns a configuration with default values
@@ -79,8 +80,9 @@ func DefaultConfig() *Config {
 	return &Config{
 		Proxy: ProxyConfig{
 			SOCKS5Port:  1080,
+			Username:    "",
+			Password:    "",
 			MTProtoPort: 2080,
-			Enabled:     true,
 		},
 		HealthCheck: HealthCheckConfig{
 			Interval:           10 * time.Second,
@@ -112,57 +114,7 @@ func LoadFromFile(path string) (*Config, error) {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
 
-	// Apply environment variable overrides
-	applyEnvOverrides(config)
-
 	return config, nil
-}
-
-func applyEnvOverrides(config *Config) {
-	// Proxy settings
-	if val := os.Getenv("PROXY_SOCKS5_PORT"); val != "" {
-		if port := parseInt(val); port > 0 {
-			config.Proxy.SOCKS5Port = port
-		}
-	}
-	if val := os.Getenv("PROXY_MTProto_PORT"); val != "" {
-		if port := parseInt(val); port > 0 {
-			config.Proxy.MTProtoPort = port
-		}
-	}
-	if val := os.Getenv("PROXY_ENABLED"); val != "" {
-		config.Proxy.Enabled = parseBool(val)
-	}
-
-	// Health check settings
-	if val := os.Getenv("HEALTH_CHECK_INTERVAL"); val != "" {
-		if d := parseDuration(val); d > 0 {
-			config.HealthCheck.Interval = d
-		}
-	}
-	if val := os.Getenv("HEALTH_CHECK_TIMEOUT"); val != "" {
-		if d := parseDuration(val); d > 0 {
-			config.HealthCheck.Timeout = d
-		}
-	}
-
-	// Bot settings
-	if val := os.Getenv("BOT_TOKEN"); val != "" {
-		config.Bot.Token = val
-	}
-	if val := os.Getenv("BOT_ADMIN_CHAT_IDS"); val != "" {
-		config.Bot.AdminChatIDs = parseIntSlice(val)
-	}
-
-	// Metrics settings
-	if val := os.Getenv("METRICS_PORT"); val != "" {
-		if port := parseInt(val); port > 0 {
-			config.Metrics.Port = port
-		}
-	}
-	if val := os.Getenv("LOG_LEVEL"); val != "" {
-		config.LogLevel = val
-	}
 }
 
 func parseInt(s string) int {
@@ -204,7 +156,7 @@ func parseDuration(s string) time.Duration {
 
 // Validate validates the configuration
 func (c *Config) Validate() error {
-	if c.Proxy.Enabled && c.Proxy.SOCKS5Port == 0 && c.Proxy.MTProtoPort == 0 {
+	if c.Proxy.SOCKS5Port == 0 && c.Proxy.MTProtoPort == 0 {
 		return fmt.Errorf("at least one proxy port must be specified")
 	}
 

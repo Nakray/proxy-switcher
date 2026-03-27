@@ -34,8 +34,8 @@ func TestConfigValidate(t *testing.T) {
 			name: "valid config",
 			config: &Config{
 				Proxy: ProxyConfig{
-					SOCKS5Port: 1080,
-					Enabled:    true,
+					SOCKS5Port:  1080,
+					AuthEnabled: true,
 				},
 				Upstreams: []Upstream{
 					{
@@ -52,8 +52,8 @@ func TestConfigValidate(t *testing.T) {
 			name: "no upstreams",
 			config: &Config{
 				Proxy: ProxyConfig{
-					SOCKS5Port: 1080,
-					Enabled:    true,
+					SOCKS5Port:  1080,
+					AuthEnabled: true,
 				},
 				Upstreams: []Upstream{},
 			},
@@ -63,8 +63,8 @@ func TestConfigValidate(t *testing.T) {
 			name: "bot enabled without token",
 			config: &Config{
 				Proxy: ProxyConfig{
-					SOCKS5Port: 1080,
-					Enabled:    true,
+					SOCKS5Port:  1080,
+					AuthEnabled: true,
 				},
 				Bot: BotConfig{},
 			},
@@ -171,8 +171,8 @@ func TestLoadFromEnv(t *testing.T) {
 func TestConfigString(t *testing.T) {
 	cfg := &Config{
 		Proxy: ProxyConfig{
-			SOCKS5Port: 1080,
-			Enabled:    true,
+			SOCKS5Port:  1080,
+			AuthEnabled: true,
 		},
 		Upstreams: []Upstream{
 			{

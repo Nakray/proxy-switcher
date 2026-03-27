@@ -176,12 +176,70 @@ func (p *SOCKS5Proxy) handshake(conn net.Conn) error {
 		return fmt.Errorf("failed to read methods: %w", err)
 	}
 
-	// Select authentication method (no auth for now)
-	if _, err := conn.Write([]byte{socks5Version, socks5AuthNone}); err != nil {
-		return fmt.Errorf("failed to write auth response: %w", err)
+	authSupported := false
+	for _, m := range methods {
+		if m == socks5AuthPass {
+			authSupported = true
+			break
+		}
+	}
+
+	if !authSupported {
+		conn.Write([]byte{socks5Version, 0xFF})
+		return fmt.Errorf("no supported authentication methods")
+	}
+
+	if _, err := conn.Write([]byte{socks5Version, socks5AuthPass}); err != nil {
+		return fmt.Errorf("write auth method: %w", err)
+	}
+
+	authVer := make([]byte, 1)
+	if _, err := io.ReadFull(conn, authVer); err != nil {
+		return fmt.Errorf("read auth version: %w", err)
+	}
+	if authVer[0] != 0x01 {
+		return fmt.Errorf("unsupported auth version: %d", authVer[0])
+	}
+
+	uLenBuf := make([]byte, 1)
+	if _, err := io.ReadFull(conn, uLenBuf); err != nil {
+		return fmt.Errorf("read username length: %w", err)
+	}
+	uLen := int(uLenBuf[0])
+
+	username := make([]byte, uLen)
+	if _, err := io.ReadFull(conn, username); err != nil {
+		return fmt.Errorf("read username: %w", err)
+	}
+
+	pLenBuf := make([]byte, 1)
+	if _, err := io.ReadFull(conn, pLenBuf); err != nil {
+		return fmt.Errorf("read password length: %w", err)
+	}
+	pLen := int(pLenBuf[0])
+
+	password := make([]byte, pLen)
+	if _, err := io.ReadFull(conn, password); err != nil {
+		return fmt.Errorf("read password: %w", err)
+	}
+
+	if !p.validateCredentials(string(username), string(password)) {
+		conn.Write([]byte{0x01, 0x01})
+		return fmt.Errorf("invalid credentials")
+	}
+
+	if _, err := conn.Write([]byte{0x01, 0x00}); err != nil {
+		return fmt.Errorf("write auth success: %w", err)
 	}
 
 	return nil
+}
+
+func (p *SOCKS5Proxy) validateCredentials(username, pass string) bool {
+	if username == p.config.Proxy.Username && pass == p.config.Proxy.Password {
+		return true
+	}
+	return false
 }
 
 func (p *SOCKS5Proxy) processRequest(conn net.Conn, startTime time.Time) error {

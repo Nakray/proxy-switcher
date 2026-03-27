@@ -33,7 +33,6 @@ func TestNewSOCKS5Proxy(t *testing.T) {
 	cfg := &config.Config{
 		Proxy: config.ProxyConfig{
 			SOCKS5Port: 1080,
-			Enabled:    true,
 		},
 	}
 
@@ -55,7 +54,6 @@ func TestNewMTProtoProxy(t *testing.T) {
 	cfg := &config.Config{
 		Proxy: config.ProxyConfig{
 			MTProtoPort: 2080,
-			Enabled:     true,
 		},
 	}
 
@@ -77,7 +75,6 @@ func TestSOCKS5ProxyStartStop(t *testing.T) {
 	cfg := &config.Config{
 		Proxy: config.ProxyConfig{
 			SOCKS5Port: 0,
-			Enabled:    true,
 		},
 	}
 
@@ -97,7 +94,6 @@ func TestMTProtoProxyStartStop(t *testing.T) {
 	cfg := &config.Config{
 		Proxy: config.ProxyConfig{
 			MTProtoPort: 0,
-			Enabled:     true,
 		},
 	}
 

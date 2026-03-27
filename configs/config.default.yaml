@@ -2,10 +2,11 @@
 proxy:
   # SOCKS5 proxy port (incoming connections from Telegram clients)
   socks5_port: 1080
+  username: "example"
+  password: "example"
   # MTProto proxy port (incoming connections from Telegram clients)
   mtproto_port: 2080
-  # Enable/disable proxy listeners
-  enabled: true
+
 
 # Bootstrap upstream (optional)
 # Used only on first start when database is empty
